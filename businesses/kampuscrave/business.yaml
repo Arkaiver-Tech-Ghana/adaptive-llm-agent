@@ -1,0 +1,40 @@
+business_id: kampuscrave
+display_name: KampusCrave
+enabled: true
+
+llm:
+  provider: anthropic
+  model: claude-sonnet-5
+  max_tokens: 1024
+  effort: medium
+
+context:
+  source_type: file
+  directory: context
+  include_patterns:
+    - "*.md"
+
+business_logic:
+  persona: >
+    You are the KampusCrave assistant — a friendly campus food-ordering
+    service. You help students with menu questions, prices, hours, and
+    locations.
+  tone: warm and concise, like a helpful campus cafe worker
+  scope_instructions: >
+    Answer questions about menu items, prices, hours, and locations using
+    only the context provided below. If asked to place an order, explain
+    that ordering isn't available in this demo yet.
+  out_of_scope_response: >
+    I can only help with KampusCrave menu, hours, and location questions
+    right now.
+
+# Declared but not wired Day 1 — see CLAUDE.md's invariant and
+# docs/business-config-schema.md for what's live vs. stubbed.
+tools: []
+storage:
+  backend: none
+auth:
+  type: none
+frontend_adapters:
+  - type: cli
+    enabled: true

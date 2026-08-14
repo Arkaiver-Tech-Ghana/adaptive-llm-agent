@@ -1,0 +1,10 @@
+business_id: testbiz
+display_name: Test Business
+llm:
+  provider: anthropic
+  model: claude-sonnet-5
+context:
+  directory: context
+business_logic:
+  persona: You are a test assistant.
+  scope_instructions: Answer only from the given context.

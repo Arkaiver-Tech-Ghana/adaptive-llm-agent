@@ -1,0 +1,76 @@
+"""Business Config schema.
+
+Declares every axis from the PRD's "Modular config layer" requirement so a
+reviewer can see the full design from this file alone. Day 1 only wires up
+``llm``, ``context``, ``business_logic``, and ``enabled`` into the Agent
+Core — the rest (``tools``, ``storage``, ``auth``, ``frontend_adapters``)
+are declared-but-unwired stubs for Day 2/3.
+"""
+
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+
+class LLMConfig(BaseModel):
+    provider: str = "anthropic"
+    model: str = "claude-sonnet-5"
+    max_tokens: int = 1024
+    effort: Literal["low", "medium", "high", "xhigh", "max"] | None = "medium"
+
+
+class ContextConfig(BaseModel):
+    source_type: Literal["file"] = "file"
+    directory: str
+    include_patterns: list[str] = Field(default_factory=lambda: ["*.md", "*.txt"])
+
+
+class BusinessLogicConfig(BaseModel):
+    persona: str
+    scope_instructions: str
+    tone: str | None = None
+    out_of_scope_response: str | None = None
+
+
+class ToolConfig(BaseModel):
+    """Stub — declared shape only. Nothing loads this Day 1."""
+
+    name: str
+    mcp_endpoint: str | None = None
+    requires_confirmation: bool = False
+
+
+class StorageConfig(BaseModel):
+    """Stub. See docs/adr/0003 for the database-id + schema-identity design."""
+
+    backend: Literal["none", "postgres", "sqlite"] = "none"
+    database_id: str | None = None
+    schema_identity: str | None = None
+
+
+class AuthConfig(BaseModel):
+    """Stub."""
+
+    type: Literal["none", "api_key", "oauth"] = "none"
+
+
+class FrontendAdapterConfig(BaseModel):
+    """Informational only Day 1 — no adapter is implemented yet."""
+
+    type: Literal["cli", "web", "whatsapp"]
+    enabled: bool = True
+
+
+class BusinessConfig(BaseModel):
+    business_id: str
+    display_name: str
+    enabled: bool = True
+    llm: LLMConfig
+    context: ContextConfig
+    business_logic: BusinessLogicConfig
+    tools: list[ToolConfig] = Field(default_factory=list)
+    storage: StorageConfig = Field(default_factory=StorageConfig)
+    auth: AuthConfig = Field(default_factory=AuthConfig)
+    frontend_adapters: list[FrontendAdapterConfig] = Field(
+        default_factory=lambda: [FrontendAdapterConfig(type="cli")]
+    )

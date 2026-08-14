@@ -1,0 +1,6 @@
+business_id: testbiz
+display_name: Test Business
+llm:
+  provider: anthropic
+context:
+  directory: context
