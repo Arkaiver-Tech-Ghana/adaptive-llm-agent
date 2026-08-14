@@ -71,6 +71,30 @@ public repo and articles/video. Treat scrappy shortcuts (direct pushes to
 main, skipped tests, no CI) as defects even under the 3-day deadline — the
 process is part of what's being demonstrated, not overhead around it.
 
+Repo lives at `github.com/Arkaiver-Tech-Ghana/adaptive-llm-agent` (the
+Arkaiver org, not a personal account).
+
+### Branch strategy
+
+Four tiers — don't merge a feature branch straight into `main` once more
+than one feature needs to land before a version boundary:
+
+- **`feature/*`** — one branch per feature (e.g. `day-1-agent-core`).
+  Merges into the current **staging** branch, not `main`.
+- **`staging` (per version)** — integration branch for an upcoming version;
+  where multiple features land and get tested together.
+- **version branch** (e.g. `v1`) — a stabilized branch for a released
+  version, cut from staging once it's ready.
+- **`main`** — the top-level stable branch, updated from a version branch
+  at release boundaries.
+
+Day 1 shipped as a single feature straight into `main` (no staging branch
+existed yet, and it was the only feature in flight) — that's the exception,
+not the pattern. From Day 2 onward, once multiple features are in flight
+before a version boundary, route them through a `staging` branch instead.
+Exact naming/promotion mechanics beyond this aren't fixed yet — confirm
+before inventing a scheme.
+
 ## Data model notes
 
 - RLS by default: a Customer's data is invisible to other Customers except
