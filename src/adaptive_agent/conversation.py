@@ -101,7 +101,19 @@ class ConversationRuntime:
         reply = parse_confirmation_reply(user_message)
 
         if reply == "yes":
-            history = self.session_store.get_history(session_key)
+            # continue_with_tool_result appends a synthetic assistant-tool-call
+            # turn onto this history, immediately followed by the tool-result
+            # turn. Some providers (Gemini) reject a function-call turn that
+            # doesn't immediately follow a real user turn or a function-result
+            # turn — and get_history() alone never ends in "user" here: the
+            # Confirmation Request's deterministic prompt (or a nudge, for a
+            # prior ambiguous reply) was already persisted as the trailing
+            # assistant turn. Splice in this "yes" so the reconstructed
+            # transcript is valid for every provider, not just the lenient ones.
+            history = [
+                *self.session_store.get_history(session_key),
+                {"role": "user", "content": user_message},
+            ]
             tool_result = self.tool_provider.call(
                 pending.tool_call.name, pending.tool_call.arguments
             )
@@ -143,7 +155,15 @@ class ConversationRuntime:
         # Only the first tool call is considered — parallel/multiple tool
         # calls in one turn are explicitly out of scope for Day 2.
         if result.tool_calls:
-            return self._handle_tool_call(session_key, history, result.tool_calls[0])
+            # respond_with_tools appended user_message onto its own copy of
+            # `history` internally (agent_core.py) without mutating this
+            # list, so it's spliced in again here — `_handle_tool_call`'s
+            # ALLOW branch feeds this straight into continue_with_tool_result,
+            # which needs history ending in this turn's real user message
+            # immediately before the assistant-tool-call turn it synthesizes
+            # (see the matching comment in `_resolve_confirmation`).
+            history_with_this_turn = [*history, {"role": "user", "content": user_message}]
+            return self._handle_tool_call(session_key, history_with_this_turn, result.tool_calls[0])
 
         return result.text
 

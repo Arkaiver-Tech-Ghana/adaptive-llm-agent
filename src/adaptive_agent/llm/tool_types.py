@@ -21,3 +21,11 @@ class ToolCall(BaseModel):
     id: str
     name: str
     arguments: dict[str, Any]
+    # Opaque, provider-specific round-trip data a concrete LLMProvider may
+    # need to echo back verbatim when this ToolCall is replayed into a later
+    # turn (e.g. Gemini's thought_signature — see google_provider.py). Every
+    # other provider (and the Tool Rail, which only reads id/name/arguments)
+    # ignores this field entirely; it exists so a provider's own replay
+    # requirements never have to leak into the shared, provider-agnostic
+    # ToolCall shape beyond "here's a bag you can stash it in."
+    provider_data: dict[str, Any] | None = None

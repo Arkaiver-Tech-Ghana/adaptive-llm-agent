@@ -1,6 +1,7 @@
 """A second concrete LLM provider — Google's Gemini API — proving the LLM
 axis is swappable per Business Config, per CLAUDE.md's invariant."""
 
+import base64
 import uuid
 from typing import Any
 
@@ -11,6 +12,23 @@ from adaptive_agent.llm.base import LLMResponse
 from adaptive_agent.llm.tool_types import ToolCall, ToolSpec
 
 _ROLE_MAP = {"user": "user", "assistant": "model"}
+
+_THOUGHT_SIGNATURE_KEY = "google_thought_signature_b64"
+
+
+def _pack_thought_signature(raw: bytes | None) -> dict[str, Any] | None:
+    """Base64-encodes Gemini's opaque ``thought_signature`` bytes into
+    ``ToolCall.provider_data`` (kept JSON-friendly on the offchance
+    something downstream serializes it, even though nothing does today)."""
+    if raw is None:
+        return None
+    return {_THOUGHT_SIGNATURE_KEY: base64.b64encode(raw).decode("ascii")}
+
+
+def _unpack_thought_signature(provider_data: dict[str, Any] | None) -> bytes | None:
+    if not provider_data or _THOUGHT_SIGNATURE_KEY not in provider_data:
+        return None
+    return base64.b64decode(provider_data[_THOUGHT_SIGNATURE_KEY])
 
 
 class GoogleLLMProvider:
@@ -78,6 +96,7 @@ class GoogleLLMProvider:
                 id=p.function_call.id or uuid.uuid4().hex,
                 name=p.function_call.name,
                 arguments=dict(p.function_call.args or {}),
+                provider_data=_pack_thought_signature(getattr(p, "thought_signature", None)),
             )
             for p in parts
             if p.function_call is not None
@@ -130,7 +149,16 @@ def _to_native_content(message: dict[str, Any], call_names: dict[str, str]) -> t
                 types.Part(
                     function_call=types.FunctionCall(
                         id=call["id"], name=call["name"], args=call["arguments"]
-                    )
+                    ),
+                    # Gemini requires a replayed function-call Part to carry
+                    # back the same thought_signature the model attached to
+                    # its original response (an opaque token proving the call
+                    # came from this model's own reasoning) — omitting it on
+                    # a continuation turn is a real 400, not just a lint
+                    # nit. Absent for calls this provider never issued
+                    # itself (e.g. a fake in a unit test), which is fine:
+                    # Gemini only enforces this for its own function calls.
+                    thought_signature=_unpack_thought_signature(call.get("provider_data")),
                 )
             )
         return types.Content(role="model", parts=parts)

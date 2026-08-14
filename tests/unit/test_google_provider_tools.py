@@ -3,6 +3,7 @@ translation at the ``self._client.models.generate_content`` boundary. The
 underlying SDK client call is stubbed (same record-then-assert idiom as
 tests/unit/fakes.py) rather than hitting the network."""
 
+import base64
 from types import SimpleNamespace
 
 from google.genai import types
@@ -141,6 +142,77 @@ def test_generate_extracts_text_alongside_function_call_part():
 
     assert result.text == "Let me check that for you."
     assert len(result.tool_calls) == 1
+
+
+def test_generate_captures_thought_signature_into_provider_data():
+    """Gemini requires a replayed function-call Part to echo back the same
+    thought_signature the model originally attached — dropped otherwise,
+    it's a real 400 on the continuation turn (discovered live, see
+    google_provider.py's _pack_thought_signature comment). This asserts the
+    parsing half of that round trip: the response's opaque signature bytes
+    land in ToolCall.provider_data, not silently discarded."""
+    provider = _build_provider()
+
+    def fake_generate_content(**kwargs):
+        return _candidate_response(
+            [
+                SimpleNamespace(
+                    text=None,
+                    function_call=SimpleNamespace(
+                        id="call_1", name="check_room_availability", args={"room_type": "deluxe"}
+                    ),
+                    thought_signature=b"opaque-signature-bytes",
+                )
+            ]
+        )
+
+    provider._client.models.generate_content = fake_generate_content
+
+    result = provider.generate(
+        system="sys", messages=[{"role": "user", "content": "hi"}], max_tokens=100
+    )
+
+    call = result.tool_calls[0]
+    assert call.provider_data is not None
+    assert "opaque-signature-bytes" not in str(call.provider_data)  # stored, not raw
+    assert base64.b64decode(call.provider_data["google_thought_signature_b64"]) == b"opaque-signature-bytes"
+
+
+def test_generate_replays_thought_signature_onto_the_function_call_part():
+    """The other half of the round trip: a ToolCall carrying provider_data
+    from a prior turn gets its thought_signature set back on the Part when
+    replayed into a continuation call's ``contents``."""
+    provider = _build_provider()
+    captured = {}
+
+    def fake_generate_content(**kwargs):
+        captured.update(kwargs)
+        return _candidate_response([SimpleNamespace(text="Yes, it's available.", function_call=None)])
+
+    provider._client.models.generate_content = fake_generate_content
+
+    encoded = base64.b64encode(b"opaque-signature-bytes").decode("ascii")
+    messages = [
+        {"role": "user", "content": "any deluxe rooms free?"},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "name": "check_room_availability",
+                    "arguments": {"room_type": "deluxe"},
+                    "provider_data": {"google_thought_signature_b64": encoded},
+                }
+            ],
+        },
+        {"role": "tool", "tool_call_id": "call_1", "content": '{"available": true}'},
+    ]
+
+    provider.generate(system="sys", messages=messages, max_tokens=100)
+
+    native = captured["contents"]
+    assert native[1].parts[0].thought_signature == b"opaque-signature-bytes"
 
 
 def test_generate_translates_tool_call_and_tool_result_messages():
