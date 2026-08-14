@@ -25,6 +25,7 @@ disagree, the schema file wins.
 | `storage` | [`StorageConfig`](#storageconfig) | no | stub | See `docs/adr/0003` for the design this anticipates. |
 | `auth` | [`AuthConfig`](#authconfig) | no | stub | Ships with the Interface Layer on Day 3. |
 | `frontend_adapters` | list of [`FrontendAdapterConfig`](#frontendadapterconfig) | no (default: one `cli` entry) | informational | No real adapter contract exists yet — this documents intent, not behavior. |
+| `rails` | [`RailsConfig`](#railsconfig) | no (defaults below) | stub | Per-Business Input/Output Rail toggles — validated now, read by the conversation orchestrator once it lands. See `docs/adr/0004`. |
 
 ## `LLMConfig`
 
@@ -86,6 +87,23 @@ reads its API key from the environment: `ANTHROPIC_API_KEY` for
 |---|---|---|---|
 | `type` | `"cli"` \| `"web"` \| `"whatsapp"` | — (required) | |
 | `enabled` | bool | `true` | |
+
+## `RailsConfig` (stub)
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `input_enabled` | bool | `true` | Whether the Input Rail runs for this Business. |
+| `output_enabled` | bool | `true` | Whether the Output Rail runs for this Business. |
+| `scope_description` | string \| null | `null` | Unused hook for a possible later spike into per-Business dynamic prompt injection into NeMo's self-check flows. Per-Business scope is enforced today via `business_logic.out_of_scope_response`/the system prompt, not here. |
+
+This toggles Rails *per Business* — it does not select between per-Business
+NeMo configs. The NeMo config itself (`nemo_rails/`) is one shared,
+business-agnostic config for generic prompt-injection/jailbreak catching,
+loaded the same way regardless of which Business is active; see
+`docs/adr/0004` for why Rail behavior still lives inline in the Business
+Config rather than a separate file, and `nemo_rails/config.yml`'s own
+comments for why NeMo's self-check LLM is configured as Anthropic (a
+NeMo/LangChain compatibility gap with Google, not a preference).
 
 ## Onboarding a new Business
 

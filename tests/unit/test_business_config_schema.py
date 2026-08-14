@@ -50,3 +50,25 @@ def test_llm_defaults():
     assert config.llm.provider == "anthropic"
     assert config.llm.model == "claude-sonnet-5"
     assert config.llm.effort == "medium"
+
+
+def test_rails_defaults_to_both_enabled():
+    config = BusinessConfig.model_validate(VALID_MINIMAL)
+    assert config.rails.input_enabled is True
+    assert config.rails.output_enabled is True
+    assert config.rails.scope_description is None
+
+
+def test_rails_config_overridable():
+    data = {
+        **VALID_MINIMAL,
+        "rails": {
+            "input_enabled": False,
+            "output_enabled": True,
+            "scope_description": "Only KampusCrave menu/hours/location questions.",
+        },
+    }
+    config = BusinessConfig.model_validate(data)
+    assert config.rails.input_enabled is False
+    assert config.rails.output_enabled is True
+    assert config.rails.scope_description == "Only KampusCrave menu/hours/location questions."
