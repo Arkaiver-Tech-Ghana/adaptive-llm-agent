@@ -12,22 +12,36 @@
 # NeMo needs its own LLM for the `self check input` / `self check output`
 # built-in flows below — a separate, small/cheap call from whatever LLM the
 # loaded Business Config selects for the main Agent Core response. This
-# project's two live Businesses already use both Anthropic and Google
-# (docs/business-config-schema.md); NeMo's self-check model is configured
-# as Anthropic here specifically because NeMo 0.23's LangChain integration
+# project's owner has no ANTHROPIC_API_KEY (docs/business-config-schema.md
+# — both shipped Business Configs run on `google` for exactly that reason),
+# so NeMo's self-check model is Google Gemini here too: nothing in the
+# default demo path should require a key that doesn't exist.
+#
+# Getting there wasn't a one-line swap. NeMo 0.23's LangChain integration
 # passes an OpenAI-style `max_tokens` kwarg via `.bind()` to whatever chat
-# model it wraps, and `langchain-google-genai`'s `GenerateContentConfig`
-# rejects that field name outright (it wants `max_output_tokens`) — a real
-# incompatibility discovered while building this, not a preference.
-# Anthropic's API uses `max_tokens` natively, so the same NeMo code path
-# works unmodified. Requires `NEMOGUARDRAILS_LLM_FRAMEWORK=langchain` in the
-# environment (set by `NemoRailChecker`) plus `langchain`,
-# `langchain-community`, and `langchain-anthropic` installed — NeMo's
-# default (non-LangChain) framework only knows OpenAI-compatible endpoints.
+# model it wraps (nemoguardrails/library/self_check/*/actions.py hardcodes
+# that kwarg name — it isn't config-controlled). `langchain-google-genai`
+# forwards unrecognized bound kwargs straight into `google.genai.types
+# .GenerateContentConfig`, a strict pydantic model that only recognizes
+# `max_output_tokens` and rejects anything else with `extra_forbidden` — a
+# real `pydantic.ValidationError`, reproduced live against
+# `langchain-google-genai>=4.0` (confirmed against 4.3.4, the latest
+# release at the time of fixing this; also tracked upstream as
+# NVIDIA-NeMo/Guardrails#1558, introduced when NeMo bumped its
+# langchain-google-genai pin from 2.x to 4.x). `langchain-google-genai`
+# 2.x/3.x predate that regression and don't forward `max_tokens` the same
+# way, so pyproject.toml pins `langchain-google-genai<4.0` (verified
+# working through 3.2.0, the newest pre-4.x release) rather than switching
+# providers or writing custom rail actions. Requires
+# `NEMOGUARDRAILS_LLM_FRAMEWORK=langchain` in the environment (set by
+# `NemoRailChecker`) plus `langchain`, `langchain-community`, and
+# `langchain-google-genai` installed — NeMo's default (non-LangChain)
+# framework only knows OpenAI-compatible endpoints, and `google_genai`
+# isn't one of NeMo's own built-in default-framework providers either.
 models:
   - type: main
-    engine: anthropic
-    model: claude-3-5-haiku-latest
+    engine: google_genai
+    model: gemini-flash-latest
 
 rails:
   input:

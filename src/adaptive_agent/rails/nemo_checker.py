@@ -4,9 +4,9 @@ Bookends the Agent Core rather than owning its main LLM call: NeMo only
 ever runs in "checkpoint" mode here (``options={"rails": ["input"]}`` /
 ``["output"]``), each call scoped to exactly one Rail. See
 ``nemo_rails/config.yml`` for the shared, business-agnostic config and why
-its self-check LLM is Anthropic specifically (a real NeMo/LangChain
-compatibility gap with Google, discovered while building this — not a
-preference).
+its self-check LLM is Google Gemini (via LangChain's ``google_genai``
+engine, on a pinned ``langchain-google-genai`` version — see that file's
+comment for the compatibility gap this works around).
 """
 
 from pathlib import Path
@@ -18,13 +18,14 @@ from nemoguardrails.rails.llm.options import GenerationOptions
 
 from adaptive_agent.rails.base import RailVerdict
 
-# NeMo's self-check model here is Anthropic (see nemo_rails/config.yml's
-# comment for why), which isn't one of NeMo's built-in default-framework
-# providers (openai/azure/nim/ollama). NeMo's LangChain integration covers
-# it, but only once switched on — the default framework only knows
-# OpenAI-compatible endpoints. This is a process-global switch (NeMo has no
-# per-``LLMRails``-instance framework selector), which is fine here: NeMo is
-# only ever used for rails checks in this project, always via LangChain.
+# NeMo's self-check model here is Google Gemini via the `google_genai`
+# LangChain provider (see nemo_rails/config.yml's comment for why), which
+# isn't one of NeMo's built-in default-framework providers (openai/azure/
+# nim/ollama) either. NeMo's LangChain integration covers it, but only once
+# switched on — the default framework only knows OpenAI-compatible
+# endpoints. This is a process-global switch (NeMo has no per-``LLMRails``
+# -instance framework selector), which is fine here: NeMo is only ever used
+# for rails checks in this project, always via LangChain.
 set_default_framework("langchain")
 
 # Placeholder prior turn fed to NeMo when checking output only: NeMo's

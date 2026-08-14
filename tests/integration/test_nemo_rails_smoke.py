@@ -2,8 +2,9 @@
 injection-pattern message, When it passes through NeMo, Then it is rejected
 or rewritten before reaching the agent." Exercises the real, shared
 ``nemo_rails/`` config against a genuinely adversarial prompt-injection
-string, using NeMo's own self-check LLM (Anthropic — see
-``nemo_rails/config.yml``'s comment for why).
+string, using NeMo's own self-check LLM (Google Gemini via the
+``google_genai`` LangChain provider — see ``nemo_rails/config.yml``'s
+comment for why).
 """
 
 import os
@@ -29,8 +30,8 @@ INJECTION_ATTEMPT = (
 
 
 @pytest.mark.skipif(
-    not os.getenv("ANTHROPIC_API_KEY"),
-    reason="requires a real ANTHROPIC_API_KEY (nemo_rails/config.yml uses Anthropic for NeMo's self-check LLM)",
+    not os.getenv("GOOGLE_API_KEY"),
+    reason="requires a real GOOGLE_API_KEY (nemo_rails/config.yml uses Google Gemini for NeMo's self-check LLM)",
 )
 def test_input_rail_catches_genuine_injection_attempt():
     checker = NemoRailChecker(NEMO_CONFIG_DIR)
@@ -45,8 +46,8 @@ def test_input_rail_catches_genuine_injection_attempt():
 
 
 @pytest.mark.skipif(
-    not os.getenv("ANTHROPIC_API_KEY"),
-    reason="requires a real ANTHROPIC_API_KEY (nemo_rails/config.yml uses Anthropic for NeMo's self-check LLM)",
+    not os.getenv("GOOGLE_API_KEY"),
+    reason="requires a real GOOGLE_API_KEY (nemo_rails/config.yml uses Google Gemini for NeMo's self-check LLM)",
 )
 def test_input_rail_allows_a_benign_message():
     checker = NemoRailChecker(NEMO_CONFIG_DIR)
