@@ -37,6 +37,20 @@ class FakeLLMProvider:
         return LLMResponse(text=self.canned_text, tool_calls=self.canned_tool_calls)
 
 
+class FakeToolProvider:
+    """Implements ToolProvider. Records the call it received, returns a canned result."""
+
+    def __init__(self, canned_result: Any = None):
+        self.canned_result = canned_result
+        self.last_name: str | None = None
+        self.last_arguments: dict[str, Any] | None = None
+
+    def call(self, name: str, arguments: dict[str, Any]) -> Any:
+        self.last_name = name
+        self.last_arguments = arguments
+        return self.canned_result
+
+
 class FakeRailChecker:
     """Implements RailChecker. Canned allow/block verdicts, records the last
     message each method was asked to check."""
