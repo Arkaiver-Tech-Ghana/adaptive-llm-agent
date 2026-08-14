@@ -1,0 +1,33 @@
+[project]
+name = "adaptive-agent"
+version = "0.1.0"
+description = "Single agent core, wrapped by NeMo Guardrails, serving multiple businesses off one config-driven codebase."
+readme = "README.md"
+authors = [
+    { name = "Ramsey Root", email = "ramseygborgla@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "pydantic>=2.9",
+    "pyyaml>=6.0",
+    "anthropic>=0.68",
+]
+
+[project.scripts]
+adaptive-agent-cli = "adaptive_agent.interfaces.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "ruff>=0.8",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: hits the real Anthropic API; requires ANTHROPIC_API_KEY",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.4,<0.13.0"]
+build-backend = "uv_build"
