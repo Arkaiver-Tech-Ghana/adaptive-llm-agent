@@ -11,11 +11,15 @@ import argparse
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 from adaptive_agent.agent_core import BusinessDisabledError, load_agent_core
 from adaptive_agent.business_config.loader import BusinessConfigError
 
 
 def main() -> None:
+    load_dotenv()
+
     parser = argparse.ArgumentParser(description="Adaptive Agent CLI test harness")
     parser.add_argument(
         "--business",
