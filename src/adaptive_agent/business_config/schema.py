@@ -7,7 +7,7 @@ Core — the rest (``tools``, ``storage``, ``auth``, ``frontend_adapters``)
 are declared-but-unwired stubs for Day 2/3.
 """
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -33,9 +33,15 @@ class BusinessLogicConfig(BaseModel):
 
 
 class ToolConfig(BaseModel):
-    """Stub — declared shape only. Nothing loads this Day 1."""
+    """A Tool a Business exposes to its Agent Core. ``description`` and
+    ``input_schema`` are what get handed to the LLM (via ``ToolSpec``) so it
+    knows the Tool exists and how to call it; ``requires_confirmation`` is
+    read by the Tool Rail to decide whether a call needs a Confirmation
+    before it executes."""
 
     name: str
+    description: str
+    input_schema: dict[str, Any] = Field(default_factory=dict)
     mcp_endpoint: str | None = None
     requires_confirmation: bool = False
 

@@ -50,3 +50,48 @@ def test_llm_defaults():
     assert config.llm.provider == "anthropic"
     assert config.llm.model == "claude-sonnet-5"
     assert config.llm.effort == "medium"
+
+
+def test_tool_config_requires_name_and_description():
+    with pytest.raises(ValidationError):
+        BusinessConfig.model_validate(
+            {**VALID_MINIMAL, "tools": [{"name": "check_room_availability"}]}
+        )
+
+
+def test_tool_config_parses_description_and_input_schema():
+    data = {
+        **VALID_MINIMAL,
+        "tools": [
+            {
+                "name": "check_room_availability",
+                "description": "Check whether a room type is available for given dates.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"room_type": {"type": "string"}},
+                    "required": ["room_type"],
+                },
+                "requires_confirmation": False,
+            }
+        ],
+    }
+    config = BusinessConfig.model_validate(data)
+    tool = config.tools[0]
+    assert tool.name == "check_room_availability"
+    assert tool.description == "Check whether a room type is available for given dates."
+    assert tool.input_schema == {
+        "type": "object",
+        "properties": {"room_type": {"type": "string"}},
+        "required": ["room_type"],
+    }
+    assert tool.requires_confirmation is False
+    assert tool.mcp_endpoint is None
+
+
+def test_tool_config_input_schema_defaults_to_empty_dict():
+    data = {
+        **VALID_MINIMAL,
+        "tools": [{"name": "book_room", "description": "Book a room."}],
+    }
+    config = BusinessConfig.model_validate(data)
+    assert config.tools[0].input_schema == {}
