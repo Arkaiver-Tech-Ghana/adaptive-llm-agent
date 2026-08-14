@@ -120,7 +120,12 @@ def test_continue_with_tool_result_assembles_expected_message_sequence():
             "role": "assistant",
             "content": "",
             "tool_calls": [
-                {"id": "call_1", "name": "check_room_availability", "arguments": {"room_type": "deluxe"}}
+                {
+                    "id": "call_1",
+                    "name": "check_room_availability",
+                    "arguments": {"room_type": "deluxe"},
+                    "provider_data": None,
+                }
             ],
         },
         {"role": "tool", "tool_call_id": "call_1", "content": '{"available": true}'},

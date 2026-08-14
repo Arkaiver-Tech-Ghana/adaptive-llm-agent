@@ -3,8 +3,8 @@ display_name: Grand Vista Hotel
 enabled: true
 
 llm:
-  provider: anthropic
-  model: claude-sonnet-5
+  provider: google
+  model: gemini-flash-latest
   max_tokens: 1024
 
 context:
