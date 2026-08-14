@@ -4,7 +4,7 @@ enabled: true
 
 llm:
   provider: google
-  model: gemini-2.5-flash
+  model: gemini-flash-latest
   max_tokens: 1024
 
 context:

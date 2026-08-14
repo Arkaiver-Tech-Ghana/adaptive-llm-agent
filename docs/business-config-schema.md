@@ -31,7 +31,7 @@ disagree, the schema file wins.
 | Field | Type | Default | Notes |
 |---|---|---|---|
 | `provider` | string | `"anthropic"` | Looked up in `llm/registry.py`'s provider map. Currently `"anthropic"` or `"google"`. Unknown provider → `UnknownLLMProviderError`. |
-| `model` | string | `"claude-sonnet-5"` | Passed straight to the provider, e.g. `"claude-sonnet-5"` for `anthropic` or `"gemini-2.5-flash"` for `google`. |
+| `model` | string | `"claude-sonnet-5"` | Passed straight to the provider, e.g. `"claude-sonnet-5"` for `anthropic` or `"gemini-flash-latest"` for `google`. |
 | `max_tokens` | int | `1024` | Passed to the LLM call as-is. |
 | `effort` | `"low"` \| `"medium"` \| `"high"` \| `"xhigh"` \| `"max"` \| `null` | `"medium"` | Anthropic-only: forwarded to `output_config.effort`. Ignored by the `google` provider. |
 

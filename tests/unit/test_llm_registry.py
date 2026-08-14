@@ -13,9 +13,9 @@ def test_build_anthropic_provider_no_network_call():
 
 
 def test_build_google_provider_no_network_call():
-    provider = build_llm_provider(LLMConfig(provider="google", model="gemini-2.5-flash"))
+    provider = build_llm_provider(LLMConfig(provider="google", model="gemini-flash-latest"))
     assert isinstance(provider, GoogleLLMProvider)
-    assert provider._model == "gemini-2.5-flash"
+    assert provider._model == "gemini-flash-latest"
     assert provider._client is None
 
 
