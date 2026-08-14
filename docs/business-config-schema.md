@@ -2,10 +2,11 @@
 
 The Business Config is the single YAML file that turns the generic Agent
 Core into one specific Business. Every axis from the PRD's "Modular config
-layer" requirement is declared here — **wired** axes are read by the Day 1
-Agent Core; **stub** axes are validated but not yet acted on (they ship
-Day 2/3 per the PRD timeline, and their `base.py` Protocol already exists
-under `src/adaptive_agent/<axis>/`).
+layer" requirement is declared here — **wired** axes are read by the Agent
+Core and/or the `ConversationRuntime` that wraps it in Rails (see
+`conversation.py`); **stub** axes are validated but not yet acted on (they
+ship Day 3 per the PRD timeline, and their `base.py` Protocol already
+exists under `src/adaptive_agent/<axis>/`).
 
 See `src/adaptive_agent/business_config/schema.py` for the authoritative
 Pydantic definitions this table is generated from by hand — if the two
@@ -21,11 +22,11 @@ disagree, the schema file wins.
 | `llm` | [`LLMConfig`](#llmconfig) | yes | wired | Which LLM answers for this Business. |
 | `context` | [`ContextConfig`](#contextconfig) | yes | wired | Where this Business's grounding documents live. |
 | `business_logic` | [`BusinessLogicConfig`](#businesslogicconfig) | yes | wired | Persona, scope, tone. |
-| `tools` | list of [`ToolConfig`](#toolconfig) | no (default `[]`) | stub | Declared shape only — no tool-calling Day 1. |
+| `tools` | list of [`ToolConfig`](#toolconfig) | no (default `[]`) | wired | Read by `AgentCore.tool_specs` (offered to the LLM) and the Tool Rail (`requires_confirmation`), both invoked from `ConversationRuntime.handle_message`. |
 | `storage` | [`StorageConfig`](#storageconfig) | no | stub | See `docs/adr/0003` for the design this anticipates. |
 | `auth` | [`AuthConfig`](#authconfig) | no | stub | Ships with the Interface Layer on Day 3. |
 | `frontend_adapters` | list of [`FrontendAdapterConfig`](#frontendadapterconfig) | no (default: one `cli` entry) | informational | No real adapter contract exists yet — this documents intent, not behavior. |
-| `rails` | [`RailsConfig`](#railsconfig) | no (defaults below) | stub | Per-Business Input/Output Rail toggles — validated now, read by the conversation orchestrator once it lands. See `docs/adr/0004`. |
+| `rails` | [`RailsConfig`](#railsconfig) | no (defaults below) | wired | Per-Business Input/Output Rail toggles, read by `ConversationRuntime.handle_message` to decide whether to call the `RailChecker` at all for this Business. See `docs/adr/0004`. |
 
 ## `LLMConfig`
 
@@ -59,13 +60,15 @@ reads its API key from the environment: `ANTHROPIC_API_KEY` for
 | `tone` | string \| null | `null` | Optional tone line in the system prompt. |
 | `out_of_scope_response` | string \| null | `null` | If set, the model is told to use this exact phrasing outside scope. Enforcing it is a Day 2 Output Rail job — Day 1 only asks nicely. |
 
-## `ToolConfig` (stub)
+## `ToolConfig` (wired)
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
-| `name` | string | — (required) | |
-| `mcp_endpoint` | string \| null | `null` | Per the PRD, tools are MCP-compatible. |
-| `requires_confirmation` | bool | `false` | Maps to the Tool Rail's confirmation gate (Day 2). |
+| `name` | string | — (required) | Matches a name the loaded `ToolProvider.call()` implements; an LLM-requested call to a name not in this Business's `tools` list is DENYed by the Tool Rail (a hallucination guard) rather than executed. |
+| `description` | string | — (required) | Handed to the LLM (via `ToolSpec`) so it knows the Tool exists and when to use it. Also used verbatim (lowercased) to build the Tool Rail's deterministic Confirmation prompt when `requires_confirmation` is true — see `conversation.py`'s `_build_confirmation_prompt`. |
+| `input_schema` | dict (JSON Schema) | `{}` | Handed to the LLM (via `ToolSpec`) describing the Tool's call arguments. |
+| `mcp_endpoint` | string \| null | `null` | Per the PRD, tools are MCP-compatible **in interface shape only** — `ToolProvider.call(name, arguments)` mirrors an MCP tool call, and `input_schema` is JSON-Schema like MCP's own tool descriptors. No real MCP wire-protocol server/client is stood up this sprint; this field is declared but unused — swapping in an MCP-backed `ToolProvider` later wouldn't require a schema change, but nothing today speaks the MCP protocol over this endpoint. |
+| `requires_confirmation` | bool | `false` | Read by the Tool Rail (`rails/tool_rail.py`'s `decide()`) to choose `ALLOW` vs `REQUIRE_CONFIRMATION`. A Tool Rail `REQUIRE_CONFIRMATION` verdict stores a Confirmation Request in the Session until the Customer replies yes/no. |
 
 ## `StorageConfig` (stub)
 
@@ -88,7 +91,7 @@ reads its API key from the environment: `ANTHROPIC_API_KEY` for
 | `type` | `"cli"` \| `"web"` \| `"whatsapp"` | — (required) | |
 | `enabled` | bool | `true` | |
 
-## `RailsConfig` (stub)
+## `RailsConfig` (wired)
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
