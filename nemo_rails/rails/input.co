@@ -1,0 +1,17 @@
+# Input Rail — checks an incoming message for injection/off-topic content
+# before the Agent Core ever sees it (CONTEXT.md's "Input Rail").
+#
+# This redefines NeMo's built-in `self check input` flow under its own name
+# (harmless — Colang lets a project file override a library flow of the
+# same name) purely so a reviewer opening this repo's rails config finds
+# the Input Rail's actual logic here instead of needing to dig through
+# NeMo's own library source. The behavior is unchanged from the library
+# default: run the `self_check_input` action (an LLM call using the
+# `self_check_input` prompt in ../config.yml), and if it says the message
+# should be blocked, refuse and stop — the Agent Core is never invoked.
+define flow self check input
+  $allowed = execute self_check_input
+
+  if not $allowed
+    bot refuse to respond
+    stop
