@@ -2,6 +2,7 @@ import pytest
 
 from adaptive_agent.business_config.schema import LLMConfig
 from adaptive_agent.llm.anthropic_provider import AnthropicLLMProvider
+from adaptive_agent.llm.google_provider import GoogleLLMProvider
 from adaptive_agent.llm.registry import UnknownLLMProviderError, build_llm_provider
 
 
@@ -9,6 +10,13 @@ def test_build_anthropic_provider_no_network_call():
     provider = build_llm_provider(LLMConfig(provider="anthropic", model="claude-sonnet-5"))
     assert isinstance(provider, AnthropicLLMProvider)
     assert provider._model == "claude-sonnet-5"
+
+
+def test_build_google_provider_no_network_call():
+    provider = build_llm_provider(LLMConfig(provider="google", model="gemini-flash-latest"))
+    assert isinstance(provider, GoogleLLMProvider)
+    assert provider._model == "gemini-flash-latest"
+    assert provider._client is None
 
 
 def test_unknown_provider_raises_helpful_error():

@@ -30,10 +30,16 @@ disagree, the schema file wins.
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
-| `provider` | string | `"anthropic"` | Looked up in `llm/registry.py`'s provider map. Unknown provider → `UnknownLLMProviderError`. |
-| `model` | string | `"claude-sonnet-5"` | Passed straight to the provider. |
+| `provider` | string | `"anthropic"` | Looked up in `llm/registry.py`'s provider map. Currently `"anthropic"` or `"google"`. Unknown provider → `UnknownLLMProviderError`. |
+| `model` | string | `"claude-sonnet-5"` | Passed straight to the provider, e.g. `"claude-sonnet-5"` for `anthropic` or `"gemini-flash-latest"` for `google`. |
 | `max_tokens` | int | `1024` | Passed to the LLM call as-is. |
-| `effort` | `"low"` \| `"medium"` \| `"high"` \| `"xhigh"` \| `"max"` \| `null` | `"medium"` | Forwarded to `output_config.effort` on supporting models. |
+| `effort` | `"low"` \| `"medium"` \| `"high"` \| `"xhigh"` \| `"max"` \| `null` | `"medium"` | Anthropic-only: forwarded to `output_config.effort`. Ignored by the `google` provider. |
+
+Two live providers exist to prove the LLM axis is swappable per Business
+Config with zero core-code changes — see `CLAUDE.md`'s invariant. Each
+reads its API key from the environment: `ANTHROPIC_API_KEY` for
+`anthropic`, `GOOGLE_API_KEY` (or `GEMINI_API_KEY`) for `google`. The
+`kampuscrave` Business Config uses `google` by default.
 
 ## `ContextConfig`
 
