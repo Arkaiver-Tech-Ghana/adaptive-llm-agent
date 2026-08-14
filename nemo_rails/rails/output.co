@@ -1,0 +1,16 @@
+# Output Rail — validates the Agent Core's response before it reaches the
+# Customer (CONTEXT.md's "Output Rail").
+#
+# Redefines NeMo's built-in `self check output` flow under its own name for
+# the same reason as ../rails/input.co: keep the Output Rail's actual logic
+# readable from this repo rather than NeMo's library source. Runs the
+# `self_check_output` action (an LLM call using the `self_check_output`
+# prompt in ../config.yml) against the Agent Core's already-generated reply;
+# if it says the response should be blocked, the Customer gets a refusal
+# instead of the raw reply.
+define flow self check output
+  $allowed = execute self_check_output
+
+  if not $allowed
+    bot refuse to respond
+    stop

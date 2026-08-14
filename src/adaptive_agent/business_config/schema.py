@@ -67,6 +67,24 @@ class FrontendAdapterConfig(BaseModel):
     enabled: bool = True
 
 
+class RailsConfig(BaseModel):
+    """Per-Business Rail on/off switches. See docs/adr/0004 for why this
+    lives inline in the Business Config rather than a separate file.
+
+    The NeMo config itself (``nemo_rails/``) is one shared, business-agnostic
+    config for generic injection/jailbreak catching — these flags don't
+    select between per-Business NeMo configs, they just let a Business turn
+    a Rail off outright. ``scope_description`` is an unused hook for a later
+    spike into per-Business dynamic prompt injection into NeMo's self-check
+    flows; per-Business scope boundaries are enforced today at the Agent
+    Core's ``business_logic.out_of_scope_response``/system-prompt layer.
+    """
+
+    input_enabled: bool = True
+    output_enabled: bool = True
+    scope_description: str | None = None
+
+
 class BusinessConfig(BaseModel):
     business_id: str
     display_name: str
@@ -80,3 +98,4 @@ class BusinessConfig(BaseModel):
     frontend_adapters: list[FrontendAdapterConfig] = Field(
         default_factory=lambda: [FrontendAdapterConfig(type="cli")]
     )
+    rails: RailsConfig = Field(default_factory=RailsConfig)

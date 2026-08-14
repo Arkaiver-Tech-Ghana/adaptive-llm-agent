@@ -2,8 +2,14 @@ from adaptive_agent.business_config.schema import ToolConfig
 from adaptive_agent.llm.tool_types import ToolCall
 from adaptive_agent.rails.tool_rail import ToolRailDecision, decide
 
-READ_TOOL = ToolConfig(name="check_room_availability", requires_confirmation=False)
-WRITE_TOOL = ToolConfig(name="book_room", requires_confirmation=True)
+READ_TOOL = ToolConfig(
+    name="check_room_availability",
+    description="Check room availability for given dates.",
+    requires_confirmation=False,
+)
+WRITE_TOOL = ToolConfig(
+    name="book_room", description="Book a room.", requires_confirmation=True
+)
 TOOL_CONFIGS = [READ_TOOL, WRITE_TOOL]
 
 
