@@ -1,0 +1,88 @@
+business_id: hotel
+display_name: Grand Vista Hotel
+enabled: true
+
+llm:
+  provider: anthropic
+  model: claude-sonnet-5
+  max_tokens: 1024
+
+context:
+  source_type: file
+  directory: context
+  include_patterns:
+    - "*.md"
+
+business_logic:
+  persona: >
+    You are the Grand Vista Hotel assistant — a courteous, professional
+    concierge. You help guests with room types, rates, availability, hotel
+    policies, and booking a room.
+  tone: warm and professional, like an attentive front-desk concierge
+  scope_instructions: >
+    Answer questions about room types, nightly rates, availability, and
+    hotel policies (check-in/check-out times, cancellation, pets, and
+    similar) using only the context provided below and the tools available
+    to you. Use the check_room_availability tool to check whether a room
+    type is available for given dates, and the book_room tool to make a
+    booking once the guest confirms. If asked about anything outside room
+    types, rates, availability, policies, or booking a room, explain that
+    it's outside what this assistant can help with.
+  out_of_scope_response: >
+    I can only help with Grand Vista Hotel room types, rates, availability,
+    policies, and bookings right now.
+
+tools:
+  - name: check_room_availability
+    description: >
+      Check whether a given room type is available for a specified
+      check-in and check-out date.
+    input_schema:
+      type: object
+      properties:
+        room_type:
+          type: string
+          enum: ["standard", "deluxe", "suite"]
+          description: The type of room to check availability for.
+        check_in:
+          type: string
+          format: date
+          description: Check-in date, in YYYY-MM-DD format.
+        check_out:
+          type: string
+          format: date
+          description: Check-out date, in YYYY-MM-DD format.
+      required: ["room_type", "check_in", "check_out"]
+    requires_confirmation: false
+  - name: book_room
+    description: >
+      Book a room of the given type for the given guest across the
+      specified check-in and check-out dates.
+    input_schema:
+      type: object
+      properties:
+        room_type:
+          type: string
+          enum: ["standard", "deluxe", "suite"]
+          description: The type of room to book.
+        check_in:
+          type: string
+          format: date
+          description: Check-in date, in YYYY-MM-DD format.
+        check_out:
+          type: string
+          format: date
+          description: Check-out date, in YYYY-MM-DD format.
+        guest_name:
+          type: string
+          description: Full name of the guest the booking is under.
+      required: ["room_type", "check_in", "check_out", "guest_name"]
+    requires_confirmation: true
+
+storage:
+  backend: none
+auth:
+  type: none
+frontend_adapters:
+  - type: cli
+    enabled: true
