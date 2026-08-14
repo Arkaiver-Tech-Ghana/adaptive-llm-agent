@@ -40,8 +40,12 @@ disagree, the schema file wins.
 Two live providers exist to prove the LLM axis is swappable per Business
 Config with zero core-code changes — see `CLAUDE.md`'s invariant. Each
 reads its API key from the environment: `ANTHROPIC_API_KEY` for
-`anthropic`, `GOOGLE_API_KEY` (or `GEMINI_API_KEY`) for `google`. The
-`kampuscrave` Business Config uses `google` by default.
+`anthropic`, `GOOGLE_API_KEY` (or `GEMINI_API_KEY`) for `google`. Both
+shipped Business Configs (`kampuscrave` and `hotel`) use `google` by
+default — the project owner has no `ANTHROPIC_API_KEY`, so `google` is
+what actually runs end to end in this environment. `anthropic` stays fully
+wired and supported; flipping either Business Config's `llm.provider` back
+to `anthropic` needs no code change, just an `ANTHROPIC_API_KEY`.
 
 ## `ContextConfig`
 
@@ -105,8 +109,9 @@ business-agnostic config for generic prompt-injection/jailbreak catching,
 loaded the same way regardless of which Business is active; see
 `docs/adr/0004` for why Rail behavior still lives inline in the Business
 Config rather than a separate file, and `nemo_rails/config.yml`'s own
-comments for why NeMo's self-check LLM is configured as Anthropic (a
-NeMo/LangChain compatibility gap with Google, not a preference).
+comments for how NeMo's self-check LLM is wired to Google Gemini via
+`langchain-google-genai` (pinned to a version older than the one where a
+NeMo/LangChain `max_tokens` compatibility gap was introduced).
 
 ## Onboarding a new Business
 

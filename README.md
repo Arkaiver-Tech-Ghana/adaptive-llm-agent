@@ -10,8 +10,11 @@ the full spec, `CLAUDE.md` for the standing architecture invariant, and
 ```bash
 uv sync --dev
 cp .env.example .env
-# edit .env: set GOOGLE_API_KEY (kampuscrave's default provider) and/or
-# ANTHROPIC_API_KEY (only needed if a Business Config sets llm.provider: anthropic)
+# edit .env: set GOOGLE_API_KEY — both shipped Business Configs default to
+# `google`, and NeMo's rails self-check LLM (nemo_rails/config.yml) also
+# runs on Google Gemini, so this one key is all the default demo path
+# needs. ANTHROPIC_API_KEY is only needed if you flip a Business Config's
+# llm.provider to `anthropic`.
 ```
 
 `.env` is loaded automatically by both the CLI and the test suite (via
