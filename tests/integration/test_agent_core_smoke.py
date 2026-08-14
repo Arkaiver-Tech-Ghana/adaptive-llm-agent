@@ -1,5 +1,5 @@
 """Automated version of the PRD's "tested via CLI" requirement: exercises
-the exact code path the CLI does, against the real Anthropic API and the
+the exact code path the CLI does, against the real Google Gemini API and the
 real KampusCrave Business Config.
 """
 
@@ -16,8 +16,8 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.mark.skipif(
-    not os.getenv("ANTHROPIC_API_KEY"),
-    reason="requires a real ANTHROPIC_API_KEY",
+    not os.getenv("GOOGLE_API_KEY"),
+    reason="requires a real GOOGLE_API_KEY (kampuscrave's Business Config uses the google provider)",
 )
 def test_kampuscrave_answers_menu_question_from_context():
     agent = load_agent_core(BUSINESS_CONFIG)

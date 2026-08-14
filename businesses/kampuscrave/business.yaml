@@ -3,10 +3,9 @@ display_name: KampusCrave
 enabled: true
 
 llm:
-  provider: anthropic
-  model: claude-sonnet-5
+  provider: google
+  model: gemini-2.5-flash
   max_tokens: 1024
-  effort: medium
 
 context:
   source_type: file
