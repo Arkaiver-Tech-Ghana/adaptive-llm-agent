@@ -9,6 +9,7 @@ downstream status — a 5xx here would make Meta's retrier hammer a webhook
 that our own bug (not a transient failure) caused to fail.
 """
 
+import asyncio
 import logging
 
 from fastapi import APIRouter, Query, Request, Response
@@ -81,7 +82,12 @@ def build_router(
             )
             return Response(status_code=200)
 
-        result = interface_layer.process(inbound)
+        # interface_layer.process is synchronous and, via NeMo's rail checks,
+        # blocking; NeMo's sync generate() also refuses to run at all when
+        # called on a thread that already has an asyncio event loop running
+        # (as this request handler's thread does), so this must go through
+        # a worker thread rather than being awaited or called directly.
+        result = await asyncio.to_thread(interface_layer.process, inbound)
 
         # "rate_limited"/"duplicate"/"unknown_business" -> send nothing.
         if result.status == "ok":

@@ -3,10 +3,17 @@
 ``parse_confirmation_reply`` needs zero changes: a plain-text message and a
 quick-reply button tap both become plain text here.
 
-Customer identity is BSUID-preferred: Meta's Business-Scoped User ID
-rollout is live (``contacts[].user_id``, since April 2026), and ``wa_id``/
-``from`` (the phone number) can be omitted once a Customer sets a WhatsApp
-Username. Falling back to ``from`` covers Customers who haven't set one.
+Customer identity is normally BSUID-preferred: Meta's Business-Scoped User
+ID rollout is live (``contacts[].user_id``, since April 2026), and
+``wa_id``/``from`` (the phone number) can be omitted once a Customer sets a
+WhatsApp Username. TEMPORARY: this dev-mode app's test-recipient allow-list
+doesn't recognize the BSUID as the same tester registered by phone number
+(Graph API replies to a BSUID `to` with #131030 "Recipient phone number not
+in allowed list" even though the wa_id is allow-listed) — so for now
+``wa_id``/``from`` is tried first and the BSUID is the fallback, flipped
+from the intended preference. Flip back to BSUID-first once this app is
+published (the allow-list only applies in dev mode) or Meta's allow-list
+recognizes BSUIDs.
 """
 
 from typing import Any
@@ -53,7 +60,7 @@ def parse_inbound_message(raw_json: dict[str, Any]) -> ParsedWhatsAppMessage | N
 
         contacts = value.get("contacts") or []
         contact = contacts[0] if contacts else {}
-        customer_id = contact.get("user_id") or message.get("from")
+        customer_id = contact.get("wa_id") or message.get("from") or contact.get("user_id")
         if not customer_id:
             return None
 

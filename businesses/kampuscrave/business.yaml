@@ -39,4 +39,4 @@ frontend_adapters:
     enabled: true
   - type: whatsapp
     enabled: true
-    phone_number_id: "<filled in during Meta console setup — kampuscrave test number>"
+    phone_number_id: "971518342719191"

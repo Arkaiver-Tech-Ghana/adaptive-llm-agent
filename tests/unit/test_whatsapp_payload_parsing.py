@@ -8,7 +8,10 @@ def _envelope(value: dict) -> dict:
     return {"entry": [{"id": "waba-1", "changes": [{"value": value, "field": "messages"}]}]}
 
 
-def test_text_message_with_bsuid_present_parses():
+def test_text_message_with_bsuid_present_prefers_wa_id():
+    """TEMPORARY (see payload.py's docstring): wa_id is preferred over the
+    BSUID for now, since this dev-mode app's test-recipient allow-list
+    doesn't recognize the BSUID for replies. Flip back once that's fixed."""
     value = {
         "metadata": {"phone_number_id": "123456"},
         "contacts": [{"profile": {"name": "Ada"}, "wa_id": "15551234567", "user_id": "bsuid-abc"}],
@@ -18,21 +21,20 @@ def test_text_message_with_bsuid_present_parses():
     result = parse_inbound_message(_envelope(value))
 
     assert result == ParsedWhatsAppMessage(
-        phone_number_id="123456", customer_id="bsuid-abc", message_id="wamid.1", text="hi"
+        phone_number_id="123456", customer_id="15551234567", message_id="wamid.1", text="hi"
     )
 
 
-def test_customer_id_falls_back_to_wa_id_when_user_id_absent():
-    """Pre-username Customer: no BSUID has been assigned yet."""
+def test_customer_id_falls_back_to_bsuid_when_wa_id_and_from_absent():
     value = {
         "metadata": {"phone_number_id": "123456"},
-        "contacts": [{"profile": {"name": "Ada"}, "wa_id": "15551234567"}],
-        "messages": [{"from": "15551234567", "id": "wamid.1", "type": "text", "text": {"body": "hi"}}],
+        "contacts": [{"profile": {"name": "Ada"}, "user_id": "bsuid-abc"}],
+        "messages": [{"id": "wamid.1", "type": "text", "text": {"body": "hi"}}],
     }
 
     result = parse_inbound_message(_envelope(value))
 
-    assert result.customer_id == "15551234567"
+    assert result.customer_id == "bsuid-abc"
 
 
 def test_interactive_button_reply_reduces_to_its_title():
