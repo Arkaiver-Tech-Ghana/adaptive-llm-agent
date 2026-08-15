@@ -80,7 +80,7 @@ tools:
     requires_confirmation: true
 
 storage:
-  backend: none
+  backend: sqlite
 auth:
   type: none
 frontend_adapters:

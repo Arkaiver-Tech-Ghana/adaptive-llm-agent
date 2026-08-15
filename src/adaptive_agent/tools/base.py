@@ -8,5 +8,14 @@ now so a real ToolProvider slots in later without touching agent_core.py.
 from typing import Any, Protocol
 
 
+class UnknownToolError(Exception):
+    """Raised when ``call()`` is given a tool name a ToolProvider doesn't
+    implement. Belt-and-suspenders alongside the Tool Rail's DENY verdict
+    — a ToolProvider should never silently no-op on a bad name. Shared
+    across every ToolProvider implementation so callers only need to
+    catch one exception type regardless of which Business's provider ran.
+    """
+
+
 class ToolProvider(Protocol):
     def call(self, name: str, arguments: dict[str, Any]) -> Any: ...

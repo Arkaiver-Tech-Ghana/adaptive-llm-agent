@@ -27,11 +27,22 @@ business_logic:
     I can only help with KampusCrave menu, hours, and location questions
     right now.
 
-# Declared but not wired Day 1 — see CLAUDE.md's invariant and
-# docs/business-config-schema.md for what's live vs. stubbed.
-tools: []
+tools:
+  - name: check_menu_item
+    description: >
+      Check a specific menu item's live, authoritative price and stock —
+      use this for price/stock questions instead of relying on the menu
+      document below, which is for browsing categories only.
+    input_schema:
+      type: object
+      properties:
+        item_name:
+          type: string
+          description: The exact menu item name to look up.
+      required: ["item_name"]
+    requires_confirmation: false
 storage:
-  backend: none
+  backend: sqlite
 auth:
   type: none
 frontend_adapters:
