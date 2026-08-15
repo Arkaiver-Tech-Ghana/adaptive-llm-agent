@@ -25,7 +25,7 @@ disagree, the schema file wins.
 | `tools` | list of [`ToolConfig`](#toolconfig) | no (default `[]`) | wired | Read by `AgentCore.tool_specs` (offered to the LLM) and the Tool Rail (`requires_confirmation`), both invoked from `ConversationRuntime.handle_message`. |
 | `storage` | [`StorageConfig`](#storageconfig) | no | stub | See `docs/adr/0003` for the design this anticipates. |
 | `auth` | [`AuthConfig`](#authconfig) | no | stub | Ships with the Interface Layer on Day 3. |
-| `frontend_adapters` | list of [`FrontendAdapterConfig`](#frontendadapterconfig) | no (default: one `cli` entry) | informational | No real adapter contract exists yet — this documents intent, not behavior. |
+| `frontend_adapters` | list of [`FrontendAdapterConfig`](#frontendadapterconfig) | no (default: one `cli` entry) | `cli` informational, `whatsapp` wired | `whatsapp` entries are read by `interfaces/whatsapp/registry.py` at startup to route inbound webhook traffic; `cli` stays informational (the CLI harness ignores this list). |
 | `rails` | [`RailsConfig`](#railsconfig) | no (defaults below) | wired | Per-Business Input/Output Rail toggles, read by `ConversationRuntime.handle_message` to decide whether to call the `RailChecker` at all for this Business. See `docs/adr/0004`. |
 
 ## `LLMConfig`
@@ -88,12 +88,13 @@ to `anthropic` needs no code change, just an `ANTHROPIC_API_KEY`.
 |---|---|---|---|
 | `type` | `"none"` \| `"api_key"` \| `"oauth"` | `"none"` | |
 
-## `FrontendAdapterConfig` (informational)
+## `FrontendAdapterConfig` (`cli` informational, `whatsapp` wired)
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
 | `type` | `"cli"` \| `"web"` \| `"whatsapp"` | — (required) | |
 | `enabled` | bool | `true` | |
+| `phone_number_id` | string \| null | `null` | whatsapp-only routing key. The only thing WhatsApp Cloud API's inbound webhook payload gives to route a message to the right Business (`entry[].changes[].value.metadata.phone_number_id`). `registry.py` raises `WhatsAppRegistryError` at startup if an enabled `whatsapp` entry is missing this — fail fast rather than silently drop a Business from routing. Routing data, not a secret — belongs in committed `business.yaml`. |
 
 ## `RailsConfig` (wired)
 

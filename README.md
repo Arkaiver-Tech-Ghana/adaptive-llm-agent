@@ -26,6 +26,24 @@ cp .env.example .env
 uv run adaptive-agent-cli --business businesses/kampuscrave/business.yaml
 ```
 
+## Run the WhatsApp webhook
+
+The Interface Layer (rate limiting, dedupe, request-size bounds) and the
+WhatsApp Frontend Adapter serve every enabled Business from one process,
+routed by the receiving number's `phone_number_id`.
+
+```bash
+# .env also needs: WHATSAPP_ACCESS_TOKEN, WHATSAPP_VERIFY_TOKEN,
+# WHATSAPP_APP_SECRET, and each business.yaml needs its real
+# phone_number_id filled in (see docs/business-config-schema.md).
+uv run uvicorn adaptive_agent.interfaces.whatsapp.app:app --port 8000
+```
+
+Point WhatsApp Cloud API's webhook at `https://<your-public-url>/webhook/whatsapp`
+(e.g. via `ngrok http 8000` for local testing) and subscribe to the
+`messages` field. See `docs/adr/0005` for why the webhook's signature check
+lives in the adapter rather than behind `AuthProvider`.
+
 ## Tests
 
 ```bash
