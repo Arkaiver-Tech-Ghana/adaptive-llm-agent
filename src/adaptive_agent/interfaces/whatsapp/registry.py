@@ -5,6 +5,7 @@ Business. One running FastAPI process serves every enabled Business at
 once; no restart to "swap" between them.
 """
 
+from collections.abc import Callable
 from pathlib import Path
 
 from adaptive_agent.business_config.loader import load_business_config
@@ -15,7 +16,14 @@ class WhatsAppRegistryError(Exception):
     pass
 
 
-def build_business_registry(businesses_dir: Path) -> dict[str, ConversationRuntime]:
+def build_business_registry(
+    businesses_dir: Path,
+    runtime_loader: Callable[[Path], ConversationRuntime] = load_conversation_runtime,
+) -> dict[str, ConversationRuntime]:
+    """``runtime_loader`` defaults to the real ``load_conversation_runtime``
+    (which constructs a real NemoRailChecker, requiring an LLM API key) —
+    overridable so the routing/fail-fast logic here is unit-testable
+    without one."""
     registry: dict[str, ConversationRuntime] = {}
 
     for business_yaml in sorted(businesses_dir.glob("*/business.yaml")):
@@ -39,6 +47,6 @@ def build_business_registry(businesses_dir: Path) -> dict[str, ConversationRunti
                     f"more than one Business (duplicate found in {business_yaml})"
                 )
 
-            registry[adapter.phone_number_id] = load_conversation_runtime(business_yaml)
+            registry[adapter.phone_number_id] = runtime_loader(business_yaml)
 
     return registry
