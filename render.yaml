@@ -3,7 +3,7 @@ services:
     name: adaptive-agent-whatsapp
     runtime: docker
     dockerfilePath: ./Dockerfile
-    plan: starter
+    plan: free
     autoDeploy: true
     healthCheckPath: /health
     envVars:
@@ -15,9 +15,3 @@ services:
         sync: false
       - key: WHATSAPP_APP_SECRET
         sync: false
-      - key: SESSION_DB_DIR
-        value: /data
-    disk:
-      name: session-data
-      mountPath: /data
-      sizeGB: 1
