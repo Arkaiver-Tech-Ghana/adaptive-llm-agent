@@ -10,6 +10,8 @@ not each Business, is the party with the Meta relationship. See
 docs/adr/0005 if that assumption ever changes.
 """
 
+import asyncio
+import logging
 import os
 from pathlib import Path
 
@@ -22,10 +24,36 @@ from adaptive_agent.interface_layer.service import InterfaceLayer
 from adaptive_agent.interfaces.whatsapp.registry import build_business_registry
 from adaptive_agent.interfaces.whatsapp.router import build_router
 
+logger = logging.getLogger(__name__)
+
+
+async def _populate_business_registry(registry: dict, businesses_dir: Path) -> None:
+    """Runs off the event loop thread so the (slow, per-Business NeMo Rail
+    build) work can't block request handling while it's in flight. Mutates
+    `registry` in place — `InterfaceLayer` already holds a reference to this
+    same dict, so there's nothing else to wire up once loading finishes.
+    Until then, every inbound webhook for a Business sees it as
+    unregistered ("unknown_business", silently dropped) rather than the
+    request hanging.
+    """
+    try:
+        loaded = await asyncio.to_thread(build_business_registry, businesses_dir)
+    except Exception:
+        logger.exception("Failed to build WhatsApp business registry")
+        return
+    registry.update(loaded)
+
 
 def create_app() -> FastAPI:
     businesses_dir = Path(os.environ.get("BUSINESSES_DIR", "businesses"))
-    business_registry = build_business_registry(businesses_dir)
+
+    # Populated after startup by _populate_business_registry (see below) —
+    # deliberately NOT built here. Uvicorn doesn't open its listening socket
+    # until FastAPI's startup phase returns, so any slow work done directly
+    # in create_app() (e.g. building a NemoRailChecker per Business) delays
+    # the port coming up at all, which is what made Render's health check
+    # time out rather than just respond slowly.
+    business_registry: dict = {}
 
     rate_limiter = RateLimiter(
         max_per_minute=int(os.environ.get("RATE_LIMIT_PER_MINUTE", "20"))
@@ -53,6 +81,17 @@ def create_app() -> FastAPI:
             access_token=os.environ["WHATSAPP_ACCESS_TOKEN"],
         )
     )
+
+    @fastapi_app.on_event("startup")
+    async def _start_registry_load() -> None:
+        # Scheduled, not awaited: awaiting here would still block the
+        # startup phase (and therefore the socket bind) until the whole
+        # registry is built. `fastapi_app.state` keeps a strong reference
+        # so the task isn't garbage-collected mid-flight.
+        fastapi_app.state.registry_load_task = asyncio.create_task(
+            _populate_business_registry(business_registry, businesses_dir)
+        )
+
     return fastapi_app
 
 
