@@ -78,7 +78,7 @@ to `anthropic` needs no code change, just an `ANTHROPIC_API_KEY`.
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
-| `backend` | `"none"` \| `"postgres"` \| `"sqlite"` | `"none"` | |
+| `backend` | `"none"` \| `"postgres"` \| `"sqlite"` | `"none"` | Not read by code — every Business's `ConversationRuntime` always gets a `SqliteSessionStore` + `SqliteCustomerStore` (plus, for `kampuscrave`, a `SqliteMenuRepository`) regardless of this value. `"sqlite"` here is truth-in-config only, documenting that this Business's session/customer/tool data genuinely lives in SQLite today — not a runtime switch. Both shipped Businesses (`hotel`, `kampuscrave`) are `"sqlite"` as of the live-menu-tool change; `"none"` is left as the schema default for a not-yet-onboarded Business. |
 | `database_id` | string \| null | `null` | Part of the `database-id + schema-identity` key from `docs/adr/0003`. |
 | `schema_identity` | string \| null | `null` | See above. |
 

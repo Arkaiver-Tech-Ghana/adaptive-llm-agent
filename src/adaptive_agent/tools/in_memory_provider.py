@@ -16,12 +16,9 @@ engine.
 import uuid
 from typing import Any
 
+from adaptive_agent.tools.base import UnknownToolError
 
-class UnknownToolError(Exception):
-    """Raised when ``call()`` is given a tool name this provider doesn't
-    implement. Belt-and-suspenders alongside the Tool Rail's DENY verdict
-    — this provider should never silently no-op on a bad name.
-    """
+__all__ = ["InMemoryToolProvider", "UnknownToolError"]
 
 
 class InMemoryToolProvider:

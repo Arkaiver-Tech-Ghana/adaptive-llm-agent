@@ -87,6 +87,36 @@ class FakeConversationRuntime:
         return self.canned_reply
 
 
+class FakeCustomerStore:
+    """Implements CustomerStore. Records every customer_id record_visit
+    was called with, in call order."""
+
+    def __init__(self) -> None:
+        self.visits: list[str] = []
+
+    def record_visit(self, customer_id: str) -> None:
+        self.visits.append(customer_id)
+
+
+class FakeMenuRepository:
+    """Implements MenuRepository. In-memory dict keyed by item name."""
+
+    def __init__(self, items: list[Any] | None = None):
+        self._items: dict[str, Any] = {item.name: item for item in (items or [])}
+        self.seeded: list[Any] = []
+
+    def get_item(self, name: str) -> Any:
+        return self._items.get(name)
+
+    def list_items(self) -> list[Any]:
+        return list(self._items.values())
+
+    def seed(self, items: list[Any]) -> None:
+        self.seeded.extend(items)
+        for item in items:
+            self._items[item.name] = item
+
+
 class FakeRailChecker:
     """Implements RailChecker. Canned allow/block verdicts, records the last
     message each method was asked to check."""
