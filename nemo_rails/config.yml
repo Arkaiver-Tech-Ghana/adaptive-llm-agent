@@ -41,7 +41,7 @@
 models:
   - type: main
     engine: google_genai
-    model: gemini-flash-latest
+    model: gemini-flash-lite-latest
 
 rails:
   input:
