@@ -57,11 +57,18 @@ _Avoid_: Execution rail.
 **Output Rail**:
 Validates the Agent Core's response before it reaches the Customer.
 
+**Confirmation Request**:
+The Tool Rail's outstanding ask to the Customer, holding the intercepted
+write-scoped Tool call (name and arguments) until it's answered. Lives in
+the Session until resolved.
+_Avoid_: Pending confirmation, pending action.
+
 **Confirmation**:
-An explicit yes/no from the Customer, required by the Tool Rail before a
-write-scoped Tool executes. Accepted as a WhatsApp quick-reply button or
-plain-text yes/no — the Tool Rail checks the reply against the expected
-shape, it doesn't distinguish which form was used.
+The Customer's explicit yes/no reply that resolves a Confirmation Request.
+Accepted as a WhatsApp quick-reply button or plain-text yes/no — the Tool
+Rail checks the reply against the expected shape, it doesn't distinguish
+which form was used. A "no" halts the Tool call; a "yes" releases it to
+execute.
 
 ### Frontend & sessions
 
@@ -82,9 +89,10 @@ The end user chatting with a Business through a Frontend Adapter.
 _Avoid_: User, end user, client.
 
 **Session**:
-Conversation history and pending Confirmations for one Customer on one
-Business, scoped to a single Frontend Adapter. A Customer's WhatsApp
-Session and web Session for the same Business never share context.
+Conversation history and any pending Confirmation Request for one Customer
+on one Business, scoped to a single Frontend Adapter. A Customer's
+WhatsApp Session and web Session for the same Business never share
+context.
 
 ### Actions
 

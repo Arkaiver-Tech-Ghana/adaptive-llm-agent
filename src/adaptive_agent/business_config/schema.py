@@ -7,7 +7,7 @@ Core — the rest (``tools``, ``storage``, ``auth``, ``frontend_adapters``)
 are declared-but-unwired stubs for Day 2/3.
 """
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -33,9 +33,15 @@ class BusinessLogicConfig(BaseModel):
 
 
 class ToolConfig(BaseModel):
-    """Stub — declared shape only. Nothing loads this Day 1."""
+    """A Tool a Business exposes to its Agent Core. ``description`` and
+    ``input_schema`` are what get handed to the LLM (via ``ToolSpec``) so it
+    knows the Tool exists and how to call it; ``requires_confirmation`` is
+    read by the Tool Rail to decide whether a call needs a Confirmation
+    before it executes."""
 
     name: str
+    description: str
+    input_schema: dict[str, Any] = Field(default_factory=dict)
     mcp_endpoint: str | None = None
     requires_confirmation: bool = False
 
@@ -55,10 +61,34 @@ class AuthConfig(BaseModel):
 
 
 class FrontendAdapterConfig(BaseModel):
-    """Informational only Day 1 — no adapter is implemented yet."""
+    """``cli`` stays informational (the CLI harness doesn't read this list —
+    see ``interfaces/cli.py``). ``whatsapp`` is wired Day 3: ``registry.py``
+    scans every Business's enabled ``whatsapp`` entry and indexes its
+    ConversationRuntime by ``phone_number_id``, the only thing WhatsApp
+    Cloud API's inbound webhook gives to route an inbound message to the
+    right Business."""
 
     type: Literal["cli", "web", "whatsapp"]
     enabled: bool = True
+    phone_number_id: str | None = None
+
+
+class RailsConfig(BaseModel):
+    """Per-Business Rail on/off switches. See docs/adr/0004 for why this
+    lives inline in the Business Config rather than a separate file.
+
+    The NeMo config itself (``nemo_rails/``) is one shared, business-agnostic
+    config for generic injection/jailbreak catching — these flags don't
+    select between per-Business NeMo configs, they just let a Business turn
+    a Rail off outright. ``scope_description`` is an unused hook for a later
+    spike into per-Business dynamic prompt injection into NeMo's self-check
+    flows; per-Business scope boundaries are enforced today at the Agent
+    Core's ``business_logic.out_of_scope_response``/system-prompt layer.
+    """
+
+    input_enabled: bool = True
+    output_enabled: bool = True
+    scope_description: str | None = None
 
 
 class BusinessConfig(BaseModel):
@@ -74,3 +104,4 @@ class BusinessConfig(BaseModel):
     frontend_adapters: list[FrontendAdapterConfig] = Field(
         default_factory=lambda: [FrontendAdapterConfig(type="cli")]
     )
+    rails: RailsConfig = Field(default_factory=RailsConfig)

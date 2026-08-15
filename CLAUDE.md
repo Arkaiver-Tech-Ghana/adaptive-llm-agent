@@ -81,8 +81,9 @@ than one feature needs to land before a version boundary:
 
 - **`feature/*`** — one branch per feature (e.g. `day-1-agent-core`).
   Merges into the current **staging** branch, not `main`.
-- **`staging` (per version)** — integration branch for an upcoming version;
-  where multiple features land and get tested together.
+- **`staging/<version>`** — integration branch for an upcoming version
+  (e.g. `staging/v1`); where multiple features land and get tested
+  together.
 - **version branch** (e.g. `v1`) — a stabilized branch for a released
   version, cut from staging once it's ready.
 - **`main`** — the top-level stable branch, updated from a version branch
@@ -90,10 +91,9 @@ than one feature needs to land before a version boundary:
 
 Day 1 shipped as a single feature straight into `main` (no staging branch
 existed yet, and it was the only feature in flight) — that's the exception,
-not the pattern. From Day 2 onward, once multiple features are in flight
-before a version boundary, route them through a `staging` branch instead.
-Exact naming/promotion mechanics beyond this aren't fixed yet — confirm
-before inventing a scheme.
+not the pattern. Day 1–3 of the PRD's sprint are all v1, so the whole sprint
+stages through one branch: `staging/v1`, cut from `main` once Day 2 started
+landing multiple features at once (rails, tool confirmation, hotel config).
 
 ## Data model notes
 
