@@ -40,6 +40,11 @@ def create_app() -> FastAPI:
     )
 
     fastapi_app = FastAPI(title="Adaptive Agent — WhatsApp Webhook")
+
+    @fastapi_app.get("/health")
+    def health() -> dict[str, str]:
+        return {"status": "ok"}
+
     fastapi_app.include_router(
         build_router(
             interface_layer=interface_layer,
