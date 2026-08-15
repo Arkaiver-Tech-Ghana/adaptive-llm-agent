@@ -22,7 +22,7 @@ from adaptive_agent.rails.nemo_checker import NemoRailChecker
 from adaptive_agent.rails.tool_rail import ToolRailDecision
 from adaptive_agent.rails.tool_rail import decide as decide_tool_rail
 from adaptive_agent.session.base import ConfirmationRequest, SessionStore
-from adaptive_agent.session.in_memory import InMemorySessionStore
+from adaptive_agent.session.sqlite_store import SqliteSessionStore
 from adaptive_agent.tools.base import ToolProvider
 from adaptive_agent.tools.in_memory_provider import InMemoryToolProvider
 
@@ -214,15 +214,16 @@ def _build_confirmation_prompt(tool_call: ToolCall, tool_configs: list[ToolConfi
 
 def load_conversation_runtime(business_config_path: Path) -> ConversationRuntime:
     """Loads a Business Config and wires a ready ConversationRuntime: an
-    Agent Core (via load_agent_core), an InMemoryToolProvider, an
-    InMemorySessionStore, and a NemoRailChecker pointed at the repo-root
-    nemo_rails/ config dir."""
+    Agent Core (via load_agent_core), an InMemoryToolProvider, a
+    SqliteSessionStore (one file per Business, under data/), and a
+    NemoRailChecker pointed at the repo-root nemo_rails/ config dir."""
     agent_core = load_agent_core(business_config_path)
     nemo_config_dir = Path(__file__).resolve().parents[2] / "nemo_rails"
     rail_checker = NemoRailChecker(nemo_config_dir)
+    db_path = Path("data") / f"{agent_core.business_config.business_id}.sqlite3"
     return ConversationRuntime(
         agent_core=agent_core,
         tool_provider=InMemoryToolProvider(),
-        session_store=InMemorySessionStore(),
+        session_store=SqliteSessionStore(db_path),
         rail_checker=rail_checker,
     )
