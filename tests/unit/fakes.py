@@ -51,6 +51,42 @@ class FakeToolProvider:
         return self.canned_result
 
 
+class FakeSessionStore:
+    """Implements just enough of SessionStore for FakeConversationRuntime's
+    ``session_store.get_pending_confirmation`` surface — InterfaceLayer
+    only ever reads pending-confirmation state after a handle_message call,
+    never history."""
+
+    def __init__(self) -> None:
+        self._pending: dict[str, Any] = {}
+
+    def get_pending_confirmation(self, session_key: str) -> Any:
+        return self._pending.get(session_key)
+
+    def set_pending_confirmation(self, session_key: str, request: Any) -> None:
+        self._pending[session_key] = request
+
+
+class FakeConversationRuntime:
+    """Implements the subset of ConversationRuntime's surface InterfaceLayer
+    calls: ``handle_message`` and ``.session_store.get_pending_confirmation``.
+    Records every handle_message call so tests can assert it was (or
+    wasn't) reached, e.g. by dedupe/rate-limit short-circuiting."""
+
+    def __init__(
+        self, canned_reply: str = "canned reply", pending_after_reply: Any = None
+    ):
+        self.canned_reply = canned_reply
+        self.pending_after_reply = pending_after_reply
+        self.session_store = FakeSessionStore()
+        self.calls: list[tuple[str, str]] = []
+
+    def handle_message(self, session_key: str, user_message: str) -> str:
+        self.calls.append((session_key, user_message))
+        self.session_store.set_pending_confirmation(session_key, self.pending_after_reply)
+        return self.canned_reply
+
+
 class FakeRailChecker:
     """Implements RailChecker. Canned allow/block verdicts, records the last
     message each method was asked to check."""
