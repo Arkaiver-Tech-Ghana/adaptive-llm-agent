@@ -1,0 +1,15 @@
+business_id: biz-a
+display_name: Business A
+llm:
+  provider: google
+  model: gemini-flash-latest
+context:
+  directory: context
+business_logic:
+  persona: You are Business A's assistant.
+  scope_instructions: Answer only from context.
+frontend_adapters:
+  - type: cli
+    enabled: true
+  - type: whatsapp
+    enabled: true

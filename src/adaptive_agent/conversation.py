@@ -9,6 +9,7 @@ resolution, Data Rail, the Agent Core turn itself, Tool Rail, Output Rail,
 and Session history — so no interface layer has to re-implement any of it.
 """
 
+import os
 from pathlib import Path
 from typing import Literal
 
@@ -215,12 +216,14 @@ def _build_confirmation_prompt(tool_call: ToolCall, tool_configs: list[ToolConfi
 def load_conversation_runtime(business_config_path: Path) -> ConversationRuntime:
     """Loads a Business Config and wires a ready ConversationRuntime: an
     Agent Core (via load_agent_core), an InMemoryToolProvider, a
-    SqliteSessionStore (one file per Business, under data/), and a
-    NemoRailChecker pointed at the repo-root nemo_rails/ config dir."""
+    SqliteSessionStore (one file per Business, under SESSION_DB_DIR —
+    ``data/`` by default), and a NemoRailChecker pointed at the repo-root
+    nemo_rails/ config dir."""
     agent_core = load_agent_core(business_config_path)
     nemo_config_dir = Path(__file__).resolve().parents[2] / "nemo_rails"
     rail_checker = NemoRailChecker(nemo_config_dir)
-    db_path = Path("data") / f"{agent_core.business_config.business_id}.sqlite3"
+    session_db_dir = Path(os.environ.get("SESSION_DB_DIR", "data"))
+    db_path = session_db_dir / f"{agent_core.business_config.business_id}.sqlite3"
     return ConversationRuntime(
         agent_core=agent_core,
         tool_provider=InMemoryToolProvider(),

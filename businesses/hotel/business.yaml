@@ -86,3 +86,6 @@ auth:
 frontend_adapters:
   - type: cli
     enabled: true
+  - type: whatsapp
+    enabled: true
+    phone_number_id: "<filled in during Meta console setup — hotel test number>"

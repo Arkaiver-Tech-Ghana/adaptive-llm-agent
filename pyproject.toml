@@ -23,6 +23,9 @@ dependencies = [
     # predate that regression; verified working through 3.2.0. See
     # nemo_rails/config.yml's comment for the full story.
     "langchain-google-genai>=2.1.12,<4.0",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "httpx>=0.27",
 ]
 
 [project.scripts]

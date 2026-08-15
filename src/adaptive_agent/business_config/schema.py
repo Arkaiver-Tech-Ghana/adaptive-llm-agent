@@ -61,10 +61,16 @@ class AuthConfig(BaseModel):
 
 
 class FrontendAdapterConfig(BaseModel):
-    """Informational only Day 1 — no adapter is implemented yet."""
+    """``cli`` stays informational (the CLI harness doesn't read this list —
+    see ``interfaces/cli.py``). ``whatsapp`` is wired Day 3: ``registry.py``
+    scans every Business's enabled ``whatsapp`` entry and indexes its
+    ConversationRuntime by ``phone_number_id``, the only thing WhatsApp
+    Cloud API's inbound webhook gives to route an inbound message to the
+    right Business."""
 
     type: Literal["cli", "web", "whatsapp"]
     enabled: bool = True
+    phone_number_id: str | None = None
 
 
 class RailsConfig(BaseModel):
