@@ -56,6 +56,12 @@ class ToolConfig(BaseModel):
     input_schema: dict[str, Any] = Field(default_factory=dict)
     mcp_endpoint: str | None = None
     requires_confirmation: bool = False
+    # Owner-toggleable from the admin UI (ConfigPage). A disabled Tool is
+    # dropped from what the LLM sees (AgentCore.tool_specs) and denied by
+    # the Tool Rail if the LLM calls it anyway (a stale conversation, a
+    # hallucinated call) — same DENY path as a tool name it doesn't
+    # recognize at all.
+    enabled: bool = True
 
 
 class StorageConfig(BaseModel):

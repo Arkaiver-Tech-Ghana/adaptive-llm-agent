@@ -74,6 +74,26 @@ def test_tool_specs_derived_from_business_config_tools():
     ]
 
 
+def test_tool_specs_excludes_disabled_tools():
+    config = BusinessConfig.model_validate(
+        {**CONFIG.model_dump(mode="json"), "tools": [
+            {
+                "name": "check_room_availability",
+                "description": "Check whether a room type is available.",
+                "input_schema": {"type": "object"},
+            },
+            {
+                "name": "book_room",
+                "description": "Book a room.",
+                "input_schema": {"type": "object"},
+                "enabled": False,
+            },
+        ]}
+    )
+    core = AgentCore(config, FakeLLMProvider(), FileContextProvider(FIXTURES, include_patterns=["*.md"]))
+    assert [spec.name for spec in core.tool_specs] == ["check_room_availability"]
+
+
 def test_respond_with_tools_passes_tools_through_to_provider():
     fake = FakeLLMProvider()
     core = _build_core(fake)
