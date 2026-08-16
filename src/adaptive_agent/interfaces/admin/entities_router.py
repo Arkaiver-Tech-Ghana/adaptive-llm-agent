@@ -24,7 +24,10 @@ from adaptive_agent.admin.interface_layer import (
     AdminInterfaceLayer,
     InvalidConfirmationTokenError,
 )
+from adaptive_agent.business_config.loader import load_business_config
+from adaptive_agent.business_config.writer import update_business_config
 from adaptive_agent.entities.base import ColumnDef, TableDef
+from adaptive_agent.entities.crud_tools import crud_tool_names, derive_crud_tool_configs
 from adaptive_agent.entities.sqlite_repository import (
     ColumnAlreadyExistsError,
     InvalidTableConfigError,
@@ -93,12 +96,39 @@ def build_entities_router(
         business_id: str, table_def: TableDef, authorization: str | None = Header(default=None)
     ) -> TableDef:
         user = _authorize(authorization, business_id, _OWNER_ONLY)
+        config_path = _config_path(businesses_dir, business_id)
+
+        # A tool_linked table (e.g. sqlite_menu) already has a hand-authored
+        # Tool wired into tools/registry.py — only a plain owner table gets
+        # the generic list/create/update/delete Tools auto-generated for it
+        # (entities/crud_tools.py, ADR 0008's "generic CRUD tool" follow-up).
+        current = load_business_config(config_path)
+        new_tool_configs = (
+            derive_crud_tool_configs(table_def) if table_def.tool_linked is None else []
+        )
+        colliding = {t.name for t in current.tools} & {t.name for t in new_tool_configs}
+        if colliding:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Table name {table_def.table_name!r} would generate Tool name(s) "
+                    f"that already exist: {sorted(colliding)}"
+                ),
+            )
+
         try:
             _entity_repo(business_id).create_table(table_def)
         except TableAlreadyExistsError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except (InvalidTableConfigError, InvalidToolLinkedTableError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        if new_tool_configs:
+            updated_tools = [t.model_dump(mode="json") for t in current.tools] + [
+                t.model_dump(mode="json") for t in new_tool_configs
+            ]
+            update_business_config(config_path, {"tools": updated_tools})
+
         admin_interface_layer.record_audit(
             user, business_id, "table.create", after=table_def.model_dump_json()
         )
@@ -125,6 +155,16 @@ def build_entities_router(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         repo.drop_table(table_name)
+
+        config_path = _config_path(businesses_dir, business_id)
+        current = load_business_config(config_path)
+        removed_names = set(crud_tool_names(table_name))
+        remaining_tools = [t for t in current.tools if t.name not in removed_names]
+        if len(remaining_tools) != len(current.tools):
+            update_business_config(
+                config_path, {"tools": [t.model_dump(mode="json") for t in remaining_tools]}
+            )
+
         admin_interface_layer.record_audit(
             user, business_id, "table.delete", before=existing.model_dump_json()
         )

@@ -108,6 +108,8 @@ class SqliteEntityRepository:
             ColumnDef(name=validate_identifier(c.name, InvalidTableConfigError), type=c.type, required=c.required)
             for c in table_def.columns
         ]
+        if any(c.name == "id" for c in columns):
+            raise InvalidTableConfigError("'id' is a reserved column name (auto-generated primary key)")
 
         if table_def.tool_linked is not None:
             self._check_tool_linked_requirements(table_def.tool_linked, columns)

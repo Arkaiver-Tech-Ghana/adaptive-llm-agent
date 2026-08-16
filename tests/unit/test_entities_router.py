@@ -278,3 +278,80 @@ def test_column_operations_404_on_unknown_column(client):
         "/admin/api/v1/businesses/kampuscrave/tables/notes/columns/ghost", headers=headers
     )
     assert delete.status_code == 404
+
+
+def _config_tool_names(tmp_path: Path) -> list[str]:
+    raw = yaml.safe_load((tmp_path / "businesses" / "kampuscrave" / "business.yaml").read_text())
+    return [t["name"] for t in raw["tools"]]
+
+
+def test_create_table_auto_generates_crud_tools_in_business_config(client, tmp_path):
+    headers = _login_headers("owner@kc.test")
+    client.post("/admin/api/v1/businesses/kampuscrave/tables", json=_NOTES_TABLE, headers=headers)
+
+    assert _config_tool_names(tmp_path) == [
+        "list_notes",
+        "create_notes",
+        "update_notes",
+        "delete_notes",
+    ]
+
+
+def test_delete_table_removes_its_auto_generated_crud_tools(client, tmp_path):
+    headers = _login_headers("owner@kc.test")
+    client.post("/admin/api/v1/businesses/kampuscrave/tables", json=_NOTES_TABLE, headers=headers)
+
+    confirm_token = client.delete(
+        "/admin/api/v1/businesses/kampuscrave/tables/notes", headers=headers
+    ).json()["confirm_token"]
+    client.delete(
+        "/admin/api/v1/businesses/kampuscrave/tables/notes",
+        params={"confirm_token": confirm_token},
+        headers=headers,
+    )
+
+    assert _config_tool_names(tmp_path) == []
+
+
+def test_tool_linked_table_does_not_generate_crud_tools(client, tmp_path):
+    headers = _login_headers("owner@kc.test")
+    menu_table = {
+        "table_name": "menu_items",
+        "display_name": "Menu",
+        "tool_linked": "sqlite_menu",
+        "columns": [
+            {"name": "name", "type": "text", "required": True},
+            {"name": "category", "type": "text", "required": True},
+            {"name": "price", "type": "number", "required": True},
+            {"name": "stock_quantity", "type": "number", "required": True},
+        ],
+    }
+    client.post(
+        "/admin/api/v1/businesses/kampuscrave/tables", json=menu_table, headers=headers
+    )
+
+    assert _config_tool_names(tmp_path) == []
+
+
+def test_create_table_rejects_a_name_that_collides_with_an_existing_tool_name(client, tmp_path):
+    headers = _login_headers("owner@kc.test")
+    config_path = tmp_path / "businesses" / "kampuscrave" / "business.yaml"
+    raw = yaml.safe_load(config_path.read_text())
+    raw["tools"] = [
+        {
+            "name": "list_notes",
+            "description": "Pre-existing hand-authored tool.",
+            "input_schema": {"type": "object", "properties": {}},
+        }
+    ]
+    config_path.write_text(yaml.safe_dump(raw))
+
+    response = client.post(
+        "/admin/api/v1/businesses/kampuscrave/tables", json=_NOTES_TABLE, headers=headers
+    )
+
+    assert response.status_code == 409
+    # The table itself must not have been created either — a clean reject,
+    # not a partial state.
+    listing = client.get("/admin/api/v1/businesses/kampuscrave/tables", headers=headers)
+    assert listing.json() == []
