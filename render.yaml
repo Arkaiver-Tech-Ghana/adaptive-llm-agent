@@ -15,3 +15,13 @@ services:
         sync: false
       - key: WHATSAPP_APP_SECRET
         sync: false
+      - key: ADMIN_JWT_SECRET
+        sync: false
+      - key: ADMIN_OWNER_EMAIL_KAMPUSCRAVE
+        sync: false
+      - key: ADMIN_OWNER_PASSWORD_KAMPUSCRAVE
+        sync: false
+      - key: ADMIN_OWNER_EMAIL_HOTEL
+        sync: false
+      - key: ADMIN_OWNER_PASSWORD_HOTEL
+        sync: false

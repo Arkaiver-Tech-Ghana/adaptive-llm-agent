@@ -1,14 +1,10 @@
-"""SQLite implementation of MenuRepository — one of possibly several; the
-Tool provider only ever depends on the Protocol (base.py).
+"""SQLite implementation of RoomRepository — structural mirror of
+menu/sqlite_repository.py. The Admin CRUD routes are the only caller today;
+wiring the hotel's chat-facing booking tool onto this repository (instead of
+tools/in_memory_provider.py) is a separate change.
 
-Table and column names are configurable (defaulting to the names below)
-so a Business whose menu table doesn't match those defaults points this
-repository at its own schema via Business Config's ``storage.table`` /
-``storage.columns`` — see business_config/schema.py — instead of a code
-change here.
-
-Mirrors session/sqlite_store.py's exact connection pattern: one shared
-connection, WAL mode, a threading.Lock around every read/write.
+Table and column names are configurable the same way SqliteMenuRepository's
+are, via a Business Config's ``storage.table``/``storage.columns``.
 """
 
 import re
@@ -16,26 +12,26 @@ import sqlite3
 import threading
 from pathlib import Path
 
-from adaptive_agent.menu.base import MenuItem
+from adaptive_agent.rooms.base import Room
 
-DEFAULT_TABLE = "menu_items"
+DEFAULT_TABLE = "rooms"
 DEFAULT_COLUMNS = {
     "name": "name",
-    "category": "category",
-    "price": "price",
-    "stock_quantity": "stock_quantity",
+    "room_type": "room_type",
+    "price_per_night": "price_per_night",
+    "availability_count": "availability_count",
 }
 _REQUIRED_FIELDS = frozenset(DEFAULT_COLUMNS)
 
 # Re-validated here (not just at Business Config load) since this class can
 # be constructed directly — e.g. by scripts/tests — bypassing schema.py's
 # pydantic validators. Table/column names are interpolated straight into
-# SQL strings below (sqlite3 can't bind identifiers with `?`), so this is
-# the actual injection guard, not just a config-load nicety.
+# SQL strings (sqlite3 can't bind identifiers with `?`), so this is the
+# actual injection guard, not just a config-load nicety.
 _SQL_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
-class InvalidMenuTableConfigError(Exception):
+class InvalidRoomTableConfigError(Exception):
     """Raised when a ``table``/``columns`` override isn't usable: not a
     valid SQL identifier, or ``columns`` is missing/misnaming one of the
     fields this repository requires."""
@@ -43,12 +39,12 @@ class InvalidMenuTableConfigError(Exception):
 
 def _validate_identifier(value: str) -> str:
     if not _SQL_IDENTIFIER_RE.match(value):
-        raise InvalidMenuTableConfigError(f"Not a valid SQL identifier: {value!r}")
+        raise InvalidRoomTableConfigError(f"Not a valid SQL identifier: {value!r}")
     return value
 
 
-class SqliteMenuRepository:
-    """Implements MenuRepository."""
+class SqliteRoomRepository:
+    """Implements RoomRepository."""
 
     def __init__(
         self,
@@ -58,7 +54,7 @@ class SqliteMenuRepository:
     ) -> None:
         columns = columns or DEFAULT_COLUMNS
         if set(columns) != _REQUIRED_FIELDS:
-            raise InvalidMenuTableConfigError(
+            raise InvalidRoomTableConfigError(
                 f"columns must map exactly {sorted(_REQUIRED_FIELDS)}, got {sorted(columns)}"
             )
         self._table = _validate_identifier(table)
@@ -76,60 +72,60 @@ class SqliteMenuRepository:
             f"""
             CREATE TABLE IF NOT EXISTS {self._table} (
                 {col["name"]} TEXT PRIMARY KEY,
-                {col["category"]} TEXT NOT NULL,
-                {col["price"]} REAL NOT NULL,
-                {col["stock_quantity"]} INTEGER NOT NULL
+                {col["room_type"]} TEXT NOT NULL,
+                {col["price_per_night"]} REAL NOT NULL,
+                {col["availability_count"]} INTEGER NOT NULL
             )
             """
         )
         self._conn.commit()
 
-    def get_item(self, name: str) -> MenuItem | None:
+    def get_room(self, name: str) -> Room | None:
         col = self._columns
         with self._lock:
             row = self._conn.execute(
-                f"SELECT {col['name']}, {col['category']}, {col['price']}, {col['stock_quantity']} "
-                f"FROM {self._table} WHERE {col['name']} = ?",
+                f"SELECT {col['name']}, {col['room_type']}, {col['price_per_night']}, "
+                f"{col['availability_count']} FROM {self._table} WHERE {col['name']} = ?",
                 (name,),
             ).fetchone()
         if row is None:
             return None
-        return MenuItem(
-            name=row[0], category=row[1], price=row[2], stock_quantity=row[3]
+        return Room(
+            name=row[0], room_type=row[1], price_per_night=row[2], availability_count=row[3]
         )
 
-    def list_items(self) -> list[MenuItem]:
+    def list_rooms(self) -> list[Room]:
         col = self._columns
         with self._lock:
             rows = self._conn.execute(
-                f"SELECT {col['name']}, {col['category']}, {col['price']}, {col['stock_quantity']} "
-                f"FROM {self._table}"
+                f"SELECT {col['name']}, {col['room_type']}, {col['price_per_night']}, "
+                f"{col['availability_count']} FROM {self._table}"
             ).fetchall()
         return [
-            MenuItem(name=row[0], category=row[1], price=row[2], stock_quantity=row[3])
+            Room(name=row[0], room_type=row[1], price_per_night=row[2], availability_count=row[3])
             for row in rows
         ]
 
-    def seed(self, items: list[MenuItem]) -> None:
+    def seed(self, rooms: list[Room]) -> None:
         col = self._columns
         # OR REPLACE, not OR IGNORE: re-running the seed script after
-        # editing a price/stock number in it should apply the edit, not
-        # silently no-op because the name already exists.
+        # editing a price/availability number in it should apply the edit,
+        # not silently no-op because the name already exists.
         with self._lock:
             self._conn.executemany(
                 f"""
                 INSERT OR REPLACE INTO {self._table}
-                    ({col["name"]}, {col["category"]}, {col["price"]}, {col["stock_quantity"]})
+                    ({col["name"]}, {col["room_type"]}, {col["price_per_night"]}, {col["availability_count"]})
                 VALUES (?, ?, ?, ?)
                 """,
                 [
-                    (item.name, item.category, item.price, item.stock_quantity)
-                    for item in items
+                    (room.name, room.room_type, room.price_per_night, room.availability_count)
+                    for room in rooms
                 ],
             )
             self._conn.commit()
 
-    def delete_item(self, name: str) -> bool:
+    def delete_room(self, name: str) -> bool:
         col = self._columns
         with self._lock:
             cursor = self._conn.execute(

@@ -80,6 +80,19 @@ def test_custom_table_is_actually_used_not_the_default(tmp_path):
     assert default_named_repo.get_item("Fries") is None
 
 
+def test_delete_item_removes_it_and_returns_true(tmp_path):
+    repo = _store(tmp_path)
+    repo.seed([MenuItem(name="Fries", category="sides", price=2.5, stock_quantity=20)])
+
+    assert repo.delete_item("Fries") is True
+    assert repo.get_item("Fries") is None
+
+
+def test_delete_item_returns_false_for_unknown_name(tmp_path):
+    repo = _store(tmp_path)
+    assert repo.delete_item("Nonexistent") is False
+
+
 def test_rejects_table_name_that_is_not_a_valid_identifier(tmp_path):
     with pytest.raises(InvalidMenuTableConfigError):
         SqliteMenuRepository(
