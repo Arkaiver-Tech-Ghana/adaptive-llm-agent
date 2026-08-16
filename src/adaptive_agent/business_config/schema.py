@@ -49,13 +49,27 @@ class ToolConfig(BaseModel):
     ``input_schema`` are what get handed to the LLM (via ``ToolSpec``) so it
     knows the Tool exists and how to call it; ``requires_confirmation`` is
     read by the Tool Rail to decide whether a call needs a Confirmation
-    before it executes."""
+    before it executes.
+
+    ``mcp_endpoint``, when set, is a Streamable HTTP MCP server URL —
+    ``name``/``description``/``input_schema`` stay hand-authored exactly
+    like any other Tool (see tools/mcp_provider.py), only *execution*
+    proxies to the remote server's tool of the same name."""
 
     name: str
     description: str
     input_schema: dict[str, Any] = Field(default_factory=dict)
     mcp_endpoint: str | None = None
     requires_confirmation: bool = False
+
+    @field_validator("mcp_endpoint")
+    @classmethod
+    def _mcp_endpoint_is_http_url(cls, value: str | None) -> str | None:
+        if value is not None and not value.startswith(("http://", "https://")):
+            raise ValueError(
+                f"tools[].mcp_endpoint must be an http(s) URL, got {value!r}"
+            )
+        return value
 
 
 class StorageConfig(BaseModel):
