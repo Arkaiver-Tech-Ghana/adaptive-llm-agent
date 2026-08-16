@@ -1,6 +1,6 @@
 import pytest
 
-from adaptive_agent.entities.base import ColumnDef, ColumnType, TableDef
+from adaptive_agent.entities.base import ColumnDef, ColumnType, IdType, TableDef
 from adaptive_agent.entities.sqlite_repository import (
     InvalidTableConfigError,
     InvalidToolLinkedTableError,
@@ -147,3 +147,39 @@ def test_metadata_persists_across_instances(tmp_path):
 
     second = SqliteEntityRepository(db_path)
     assert [t.table_name for t in second.list_tables()] == ["notes"]
+
+
+def test_default_id_type_is_uuid(tmp_path):
+    repo = _repo(tmp_path)
+    repo.create_table(_notes_table())
+    row = repo.upsert_row("notes", {"title": "First"})
+    assert isinstance(row["id"], str)
+    assert len(row["id"]) == 32  # uuid4().hex
+
+
+def test_auto_increment_id_type_assigns_sequential_integer_ids(tmp_path):
+    repo = _repo(tmp_path)
+    repo.create_table(_notes_table(id_type=IdType.AUTO_INCREMENT))
+
+    first = repo.upsert_row("notes", {"title": "First"})
+    second = repo.upsert_row("notes", {"title": "Second"})
+
+    assert first["id"] == 1
+    assert second["id"] == 2
+
+
+def test_auto_increment_id_type_persists_through_list_tables(tmp_path):
+    repo = _repo(tmp_path)
+    repo.create_table(_notes_table(id_type=IdType.AUTO_INCREMENT))
+    assert repo.list_tables()[0].id_type == IdType.AUTO_INCREMENT
+
+
+def test_auto_increment_table_still_accepts_an_explicit_id_for_updates(tmp_path):
+    repo = _repo(tmp_path)
+    repo.create_table(_notes_table(id_type=IdType.AUTO_INCREMENT))
+    created = repo.upsert_row("notes", {"title": "First"})
+
+    updated = repo.upsert_row("notes", {"id": created["id"], "title": "Renamed"})
+    assert updated["id"] == created["id"]
+    assert updated["title"] == "Renamed"
+    assert len(repo.list_rows("notes")) == 1

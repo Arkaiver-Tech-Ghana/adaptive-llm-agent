@@ -20,7 +20,7 @@ import uuid
 from collections.abc import Callable
 from pathlib import Path
 
-from adaptive_agent.entities.base import ColumnDef, ColumnType, TableDef
+from adaptive_agent.entities.base import ColumnDef, ColumnType, IdType, TableDef
 from adaptive_agent.sql_identifiers import validate_identifier
 
 _SQL_TYPE_BY_COLUMN_TYPE = {
@@ -78,6 +78,7 @@ class SqliteEntityRepository:
                 table_name TEXT PRIMARY KEY,
                 display_name TEXT NOT NULL,
                 columns_json TEXT NOT NULL,
+                id_type TEXT NOT NULL DEFAULT 'uuid',
                 tool_linked TEXT,
                 created_at REAL NOT NULL
             )
@@ -88,7 +89,7 @@ class SqliteEntityRepository:
     def list_tables(self) -> list[TableDef]:
         with self._lock:
             rows = self._conn.execute(
-                "SELECT table_name, display_name, columns_json, tool_linked "
+                "SELECT table_name, display_name, columns_json, id_type, tool_linked "
                 "FROM __qantonic_tables__ ORDER BY table_name"
             ).fetchall()
         return [self._table_def_from_row(row) for row in rows]
@@ -123,19 +124,25 @@ class SqliteEntityRepository:
                 f"{' NOT NULL' if c.required else ''}"
                 for c in columns
             )
+            id_column_sql = (
+                "id INTEGER PRIMARY KEY AUTOINCREMENT"
+                if table_def.id_type == IdType.AUTO_INCREMENT
+                else "id TEXT PRIMARY KEY"
+            )
             self._conn.execute(
-                f"CREATE TABLE {table_name} (id TEXT PRIMARY KEY{', ' + column_sql if column_sql else ''})"
+                f"CREATE TABLE {table_name} ({id_column_sql}{', ' + column_sql if column_sql else ''})"
             )
             self._conn.execute(
                 """
                 INSERT INTO __qantonic_tables__
-                    (table_name, display_name, columns_json, tool_linked, created_at)
-                VALUES (?, ?, ?, ?, ?)
+                    (table_name, display_name, columns_json, id_type, tool_linked, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
                     table_name,
                     table_def.display_name,
                     json.dumps([c.model_dump(mode="json") for c in columns]),
+                    table_def.id_type.value,
                     table_def.tool_linked,
                     self._now_fn(),
                 ),
@@ -174,19 +181,33 @@ class SqliteEntityRepository:
 
     def upsert_row(self, table_name: str, row: dict) -> dict:
         table_def = self._require_table(table_name)
-        row_id = row.get("id") or uuid.uuid4().hex
         column_names = [c.name for c in table_def.columns]
         values = [self._to_sql_value(c, row.get(c.name)) for c in table_def.columns]
+        provided_id = row.get("id")
 
         with self._lock:
-            self._conn.execute(
-                f"""
-                INSERT OR REPLACE INTO {table_def.table_name}
-                    (id, {", ".join(column_names)})
-                VALUES (?, {", ".join("?" for _ in column_names)})
-                """,
-                (row_id, *values),
-            )
+            if provided_id is None and table_def.id_type == IdType.AUTO_INCREMENT:
+                # Omit `id` entirely so SQLite assigns the next AUTOINCREMENT
+                # value — binding NULL would work too, but omitting it keeps
+                # this branch's INSERT shape parallel to the explicit-id one.
+                cursor = self._conn.execute(
+                    f"""
+                    INSERT INTO {table_def.table_name} ({", ".join(column_names)})
+                    VALUES ({", ".join("?" for _ in column_names)})
+                    """,
+                    values,
+                )
+                row_id = cursor.lastrowid
+            else:
+                row_id = provided_id or uuid.uuid4().hex
+                self._conn.execute(
+                    f"""
+                    INSERT OR REPLACE INTO {table_def.table_name}
+                        (id, {", ".join(column_names)})
+                    VALUES (?, {", ".join("?" for _ in column_names)})
+                    """,
+                    (row_id, *values),
+                )
             self._conn.commit()
 
         stored = self.get_row(table_name, row_id)
@@ -205,7 +226,7 @@ class SqliteEntityRepository:
     def _require_table(self, table_name: str) -> TableDef:
         with self._lock:
             row = self._conn.execute(
-                "SELECT table_name, display_name, columns_json, tool_linked "
+                "SELECT table_name, display_name, columns_json, id_type, tool_linked "
                 "FROM __qantonic_tables__ WHERE table_name = ?",
                 (table_name,),
             ).fetchone()
@@ -232,10 +253,14 @@ class SqliteEntityRepository:
 
     @staticmethod
     def _table_def_from_row(row: tuple) -> TableDef:
-        table_name, display_name, columns_json, tool_linked = row
+        table_name, display_name, columns_json, id_type, tool_linked = row
         columns = [ColumnDef(**c) for c in json.loads(columns_json)]
         return TableDef(
-            table_name=table_name, display_name=display_name, columns=columns, tool_linked=tool_linked
+            table_name=table_name,
+            display_name=display_name,
+            columns=columns,
+            id_type=IdType(id_type),
+            tool_linked=tool_linked,
         )
 
     @staticmethod

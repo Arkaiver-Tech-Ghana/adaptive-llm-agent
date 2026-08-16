@@ -28,6 +28,16 @@ class ColumnType(str, Enum):
     BOOLEAN = "boolean"
 
 
+class IdType(str, Enum):
+    """How a table's ``id`` primary key is generated. Chosen once at
+    ``create_table`` time — switching it after rows exist isn't supported
+    (would mean rewriting every existing id), so this is absent from the
+    alter-columns surface on purpose."""
+
+    UUID = "uuid"
+    AUTO_INCREMENT = "auto_increment"
+
+
 class ColumnDef(BaseModel):
     name: str
     type: ColumnType
@@ -38,6 +48,10 @@ class TableDef(BaseModel):
     table_name: str
     display_name: str
     columns: list[ColumnDef]
+    # Defaults to the original behavior (an app-generated uuid4 hex) so
+    # every TableDef written before this field existed keeps working
+    # unchanged.
+    id_type: IdType = IdType.UUID
     # Set when this table backs a chat-facing Tool (e.g. "sqlite_menu") —
     # tools/registry.py resolves a Business's tool provider by scanning for
     # the table with this value, instead of a hardcoded table name. None
