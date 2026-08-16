@@ -21,8 +21,12 @@ _SQL_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 class LLMConfig(BaseModel):
-    provider: str = "anthropic"
-    model: str = "claude-sonnet-5"
+    # Google is this project's default provider (no Anthropic account
+    # backs this deployment) — every shipped Business (kampuscrave, hotel)
+    # already sets these explicitly; this default only matters for a
+    # self-serve-provisioned Business that hasn't customized it yet.
+    provider: str = "google"
+    model: str = "gemini-flash-lite-latest"
     max_tokens: int = 1024
     effort: Literal["low", "medium", "high", "xhigh", "max"] | None = "medium"
 

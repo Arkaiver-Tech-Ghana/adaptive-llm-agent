@@ -18,7 +18,10 @@ _Avoid_: Client, tenant, account.
 The selections that define one Business's instance — frontend adapter,
 LLM, tools, storage/schema, business logic, auth type, context files,
 on/off switch. Onboarding a Business means adding a Business Config,
-never touching Agent Core code.
+never touching Agent Core code — either by hand (a developer writing
+`business.yaml` directly) or through self-serve signup (an owner creating
+one via the Business Admin UI, see below). Either path produces the same
+kind of file; the invariant doesn't change based on who created it.
 _Avoid_: Client config, tenant config.
 
 **Agent Core**:
@@ -27,11 +30,22 @@ and action-taking (tool-calling) requests. Identical code for every
 Business; behavior differs only by which Business Config is loaded.
 _Avoid_: Bot, assistant, agent (bare).
 
-**Business Admin UI**:
-A future (P2, not built for v1) interface for a business owner to edit
-their own Business Config without a developer. For v1 the Business
-Config is a hand-edited file.
+**Business Admin UI** ("Qantonic"):
+The shipped self-service web app (separate repo,
+`adaptive-llm-agent-admin`) a business owner uses to sign up, edit their
+own Business Config, and manage their own Custom Tables — without a
+developer. One owner login per Business; no staff/multi-user accounts (see
+ADR 0008). Not primed for any one Business type: besides Config and the
+Audit Log, the UI has no business-type-specific screens — a Database
+section lets an owner define and fill in their own tables generically.
 _Avoid_: Client-facing frontend, config UI.
+
+**Custom Table**:
+An owner-defined table living in a Business's own SQLite file, created
+through the Business Admin UI's Database section rather than a developer
+writing a repository class. May optionally be `tool_linked` to a specific
+chat-facing Tool (e.g. KampusCrave's menu). See ADR 0008.
+_Avoid_: Entity (bare — ambiguous with the Python `entities/` module name).
 
 ### Guardrails
 
