@@ -24,6 +24,7 @@ from adaptive_agent.admin.sqlite_store import SqliteAdminStore
 from adaptive_agent.interface_layer.dedupe import InMemoryDedupeStore
 from adaptive_agent.interface_layer.rate_limiter import RateLimiter
 from adaptive_agent.interface_layer.service import InterfaceLayer
+from adaptive_agent.interfaces.admin.entities_router import build_entities_router
 from adaptive_agent.interfaces.admin.router import build_admin_router
 from adaptive_agent.interfaces.whatsapp.registry import build_business_registry
 from adaptive_agent.interfaces.whatsapp.router import build_router
@@ -116,6 +117,13 @@ def create_app() -> FastAPI:
     admin_interface_layer = AdminInterfaceLayer(admin_store)
     fastapi_app.include_router(
         build_admin_router(
+            admin_interface_layer=admin_interface_layer,
+            admin_store=admin_store,
+            businesses_dir=businesses_dir,
+        )
+    )
+    fastapi_app.include_router(
+        build_entities_router(
             admin_interface_layer=admin_interface_layer,
             admin_store=admin_store,
             businesses_dir=businesses_dir,

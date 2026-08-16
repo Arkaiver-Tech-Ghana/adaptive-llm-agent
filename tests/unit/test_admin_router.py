@@ -71,7 +71,6 @@ def client(tmp_path: Path) -> TestClient:
             admin_interface_layer=admin_interface_layer,
             admin_store=admin_store,
             businesses_dir=businesses_dir,
-            session_db_dir=session_db_dir,
         )
     )
     return TestClient(app)
@@ -142,114 +141,16 @@ def test_patch_config_updates_persona_and_leaves_it_persisted(client):
     assert reread.json()["business_logic"]["persona"] == "Updated persona."
 
 
-def test_menu_item_create_list_update(client):
-    token = _login(client, "owner@kc.test")
-    headers = _auth_headers(token)
-
-    create = client.post(
-        "/admin/api/v1/businesses/kampuscrave/menu-items",
-        json={"name": "Fries", "category": "sides", "price": 2.5, "stock_quantity": 20},
-        headers=headers,
-    )
-    assert create.status_code == 201
-
-    duplicate = client.post(
-        "/admin/api/v1/businesses/kampuscrave/menu-items",
-        json={"name": "Fries", "category": "sides", "price": 2.5, "stock_quantity": 20},
-        headers=headers,
-    )
-    assert duplicate.status_code == 409
-
-    listing = client.get("/admin/api/v1/businesses/kampuscrave/menu-items", headers=headers)
-    assert [item["name"] for item in listing.json()] == ["Fries"]
-
-    updated = client.patch(
-        "/admin/api/v1/businesses/kampuscrave/menu-items/Fries",
-        json={"price": 3.0},
-        headers=headers,
-    )
-    assert updated.status_code == 200
-    assert updated.json()["price"] == 3.0
-
-
-def test_menu_item_delete_requires_confirmation_round_trip(client):
-    token = _login(client, "owner@kc.test")
-    headers = _auth_headers(token)
-    client.post(
-        "/admin/api/v1/businesses/kampuscrave/menu-items",
-        json={"name": "Fries", "category": "sides", "price": 2.5, "stock_quantity": 20},
-        headers=headers,
-    )
-
-    first = client.delete("/admin/api/v1/businesses/kampuscrave/menu-items/Fries", headers=headers)
-    assert first.status_code == 200
-    assert first.json()["status"] == "confirmation_required"
-    confirm_token = first.json()["confirm_token"]
-
-    # Still present — nothing executed on the first call.
-    listing = client.get("/admin/api/v1/businesses/kampuscrave/menu-items", headers=headers)
-    assert len(listing.json()) == 1
-
-    second = client.delete(
-        "/admin/api/v1/businesses/kampuscrave/menu-items/Fries",
-        params={"confirm_token": confirm_token},
-        headers=headers,
-    )
-    assert second.status_code == 200
-    assert second.json()["status"] == "deleted"
-
-    listing_after = client.get("/admin/api/v1/businesses/kampuscrave/menu-items", headers=headers)
-    assert listing_after.json() == []
-
-
-def test_menu_item_delete_rejects_bad_confirm_token(client):
-    token = _login(client, "owner@kc.test")
-    headers = _auth_headers(token)
-    client.post(
-        "/admin/api/v1/businesses/kampuscrave/menu-items",
-        json={"name": "Fries", "category": "sides", "price": 2.5, "stock_quantity": 20},
-        headers=headers,
-    )
-
-    response = client.delete(
-        "/admin/api/v1/businesses/kampuscrave/menu-items/Fries",
-        params={"confirm_token": "made-up"},
-        headers=headers,
-    )
-    assert response.status_code == 400
-
-
-def test_room_create_and_delete(client):
-    token = _login(client, "owner@hotel.test")
-    headers = _auth_headers(token)
-
-    create = client.post(
-        "/admin/api/v1/businesses/hotel/rooms",
-        json={"name": "Deluxe King", "room_type": "deluxe", "price_per_night": 120.0, "availability_count": 3},
-        headers=headers,
-    )
-    assert create.status_code == 201
-
-    first_delete = client.delete("/admin/api/v1/businesses/hotel/rooms/Deluxe King", headers=headers)
-    confirm_token = first_delete.json()["confirm_token"]
-    second_delete = client.delete(
-        "/admin/api/v1/businesses/hotel/rooms/Deluxe King",
-        params={"confirm_token": confirm_token},
-        headers=headers,
-    )
-    assert second_delete.json()["status"] == "deleted"
-
-
 def test_audit_log_records_writes(client):
     token = _login(client, "owner@kc.test")
     headers = _auth_headers(token)
-    client.post(
-        "/admin/api/v1/businesses/kampuscrave/menu-items",
-        json={"name": "Fries", "category": "sides", "price": 2.5, "stock_quantity": 20},
+    client.patch(
+        "/admin/api/v1/businesses/kampuscrave/config",
+        json={"business_logic": {"persona": "Updated persona."}},
         headers=headers,
     )
 
     response = client.get("/admin/api/v1/businesses/kampuscrave/audit-log", headers=headers)
     assert response.status_code == 200
     actions = [entry["action"] for entry in response.json()]
-    assert "menu_item.create" in actions
+    assert "config.update" in actions
