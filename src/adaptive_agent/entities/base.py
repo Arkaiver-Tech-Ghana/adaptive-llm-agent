@@ -28,6 +28,16 @@ class ColumnType(str, Enum):
     BOOLEAN = "boolean"
 
 
+class IdType(str, Enum):
+    """How a table's ``id`` primary key is generated. Chosen once at
+    ``create_table`` time — switching it after rows exist isn't supported
+    (would mean rewriting every existing id), so this is absent from the
+    alter-columns surface on purpose."""
+
+    UUID = "uuid"
+    AUTO_INCREMENT = "auto_increment"
+
+
 class ColumnDef(BaseModel):
     name: str
     type: ColumnType
@@ -38,6 +48,10 @@ class TableDef(BaseModel):
     table_name: str
     display_name: str
     columns: list[ColumnDef]
+    # Defaults to the original behavior (an app-generated uuid4 hex) so
+    # every TableDef written before this field existed keeps working
+    # unchanged.
+    id_type: IdType = IdType.UUID
     # Set when this table backs a chat-facing Tool (e.g. "sqlite_menu") —
     # tools/registry.py resolves a Business's tool provider by scanning for
     # the table with this value, instead of a hardcoded table name. None
@@ -49,6 +63,12 @@ class EntityRepository(Protocol):
     def list_tables(self) -> list[TableDef]: ...
     def create_table(self, table_def: TableDef) -> None: ...
     def drop_table(self, table_name: str) -> None: ...
+    # Column def/rename/drop — id_type isn't alterable (see IdType above),
+    # and a column's type isn't either: retyping an existing column with
+    # data in it needs a per-value conversion story this doesn't have yet.
+    def add_column(self, table_name: str, column: ColumnDef) -> TableDef: ...
+    def rename_column(self, table_name: str, column_name: str, new_name: str) -> TableDef: ...
+    def drop_column(self, table_name: str, column_name: str) -> TableDef: ...
     def list_rows(self, table_name: str) -> list[dict]: ...
     def get_row(self, table_name: str, row_id: str) -> dict | None: ...
     # Upserts by ``row["id"]`` if present, otherwise generates one and

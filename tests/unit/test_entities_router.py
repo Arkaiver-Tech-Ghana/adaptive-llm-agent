@@ -201,6 +201,85 @@ def test_row_operations_404_on_unknown_table(client):
     assert response.status_code == 404
 
 
+def test_add_rename_and_list_column_round_trip(client):
+    headers = _login_headers("owner@kc.test")
+    client.post("/admin/api/v1/businesses/kampuscrave/tables", json=_NOTES_TABLE, headers=headers)
+
+    added = client.post(
+        "/admin/api/v1/businesses/kampuscrave/tables/notes/columns",
+        json={"name": "tag", "type": "text", "required": False},
+        headers=headers,
+    )
+    assert added.status_code == 201
+    assert {c["name"] for c in added.json()["columns"]} == {"title", "tag"}
+
+    renamed = client.patch(
+        "/admin/api/v1/businesses/kampuscrave/tables/notes/columns/tag",
+        json={"name": "label"},
+        headers=headers,
+    )
+    assert renamed.status_code == 200
+    assert {c["name"] for c in renamed.json()["columns"]} == {"title", "label"}
+
+    listing = client.get("/admin/api/v1/businesses/kampuscrave/tables", headers=headers)
+    assert {c["name"] for c in listing.json()[0]["columns"]} == {"title", "label"}
+
+
+def test_add_column_rejects_duplicate_name(client):
+    headers = _login_headers("owner@kc.test")
+    client.post("/admin/api/v1/businesses/kampuscrave/tables", json=_NOTES_TABLE, headers=headers)
+
+    response = client.post(
+        "/admin/api/v1/businesses/kampuscrave/tables/notes/columns",
+        json={"name": "title", "type": "text", "required": False},
+        headers=headers,
+    )
+    assert response.status_code == 409
+
+
+def test_column_delete_requires_confirmation_round_trip(client):
+    headers = _login_headers("owner@kc.test")
+    client.post("/admin/api/v1/businesses/kampuscrave/tables", json=_NOTES_TABLE, headers=headers)
+    client.post(
+        "/admin/api/v1/businesses/kampuscrave/tables/notes/columns",
+        json={"name": "tag", "type": "text", "required": False},
+        headers=headers,
+    )
+
+    first = client.delete(
+        "/admin/api/v1/businesses/kampuscrave/tables/notes/columns/tag", headers=headers
+    )
+    assert first.json()["status"] == "confirmation_required"
+    confirm_token = first.json()["confirm_token"]
+
+    second = client.delete(
+        "/admin/api/v1/businesses/kampuscrave/tables/notes/columns/tag",
+        params={"confirm_token": confirm_token},
+        headers=headers,
+    )
+    assert second.json()["status"] == "deleted"
+
+    listing = client.get("/admin/api/v1/businesses/kampuscrave/tables", headers=headers)
+    assert {c["name"] for c in listing.json()[0]["columns"]} == {"title"}
+
+
+def test_column_operations_404_on_unknown_column(client):
+    headers = _login_headers("owner@kc.test")
+    client.post("/admin/api/v1/businesses/kampuscrave/tables", json=_NOTES_TABLE, headers=headers)
+
+    rename = client.patch(
+        "/admin/api/v1/businesses/kampuscrave/tables/notes/columns/ghost",
+        json={"name": "new_name"},
+        headers=headers,
+    )
+    assert rename.status_code == 404
+
+    delete = client.delete(
+        "/admin/api/v1/businesses/kampuscrave/tables/notes/columns/ghost", headers=headers
+    )
+    assert delete.status_code == 404
+
+
 def _config_tool_names(tmp_path: Path) -> list[str]:
     raw = yaml.safe_load((tmp_path / "businesses" / "kampuscrave" / "business.yaml").read_text())
     return [t["name"] for t in raw["tools"]]
