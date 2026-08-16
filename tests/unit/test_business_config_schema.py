@@ -47,8 +47,8 @@ def test_stub_axes_default_correctly():
 def test_llm_defaults():
     data = {**VALID_MINIMAL, "llm": {}}
     config = BusinessConfig.model_validate(data)
-    assert config.llm.provider == "anthropic"
-    assert config.llm.model == "claude-sonnet-5"
+    assert config.llm.provider == "google"
+    assert config.llm.model == "gemini-flash-lite-latest"
     assert config.llm.effort == "medium"
 
 

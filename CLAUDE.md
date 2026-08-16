@@ -27,6 +27,13 @@ one real implementation for v1 — their modularity is proven by the interface
 contract alone, not by standing up a second backend. Don't build a second
 storage or frontend implementation; it's explicitly out of scope.
 
+Self-serve signup (the Business Admin UI, "Qantonic" — see ADR 0007, ADR
+0008) is now the real, API-exercised instance of "onboarding a business
+never touches core agent code" — not just proven by two hand-written YAML
+files anymore. A signup request produces exactly the same kind of Business
+Config a developer would hand-write; the invariant above doesn't change
+based on who created it.
+
 ## Rails
 
 NeMo wraps the agent at four checkpoints, nothing reaches or leaves unchecked:
@@ -53,8 +60,11 @@ now.
 
 ## Resolved decisions (don't re-litigate)
 
-- The two businesses are fixed: **KampusCrave** (food ordering) and a
-  **hotel** (booking/enquiries).
+- The two flagship, hand-written demo businesses are **KampusCrave** (food
+  ordering) and a **hotel** (booking/enquiries) — this is no longer the
+  full set of Businesses the platform can run, though: self-serve signup
+  lets any owner create their own. See ADR 0007 (ephemeral storage
+  accepted for this public repo) and ADR 0008 (generic entity tables).
 - The demo injection attempt is genuinely adversarial, not scripted.
 - Confirmation UX accepts both WhatsApp quick-reply buttons and plain-text
   yes/no — the rail checks input against the expected shape, it doesn't try

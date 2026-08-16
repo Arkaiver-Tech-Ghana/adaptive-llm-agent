@@ -1,5 +1,12 @@
 # PRD — Adaptive Business Chat Agent (WhatsApp, v1)
 
+> **2026-08-16 addendum**: this PRD is a historical snapshot of the
+> original 3-day-sprint scope, left as-is rather than edited in place.
+> The P2 "Business Admin UI" bullet below has since shipped (self-serve
+> signup, generic owner-defined tables, no staff/RBAC) — see ADR 0007,
+> ADR 0008, and CONTEXT.md's `Business Admin UI`/`Custom Table` glossary
+> entries for the current state.
+
 ## Problem Statement
 Making production-grade agent architecture (guardrails, multi-tenant config, action-safety) legible to a reviewer in a few minutes of video and repo skimming. Without this, the project reads as "followed a tutorial" instead of "understands the system."
 

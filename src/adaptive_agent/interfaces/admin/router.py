@@ -25,6 +25,12 @@ from adaptive_agent.business_config.loader import (
     BusinessConfigError,
     load_business_config,
 )
+from adaptive_agent.business_config.provisioning import (
+    BusinessAlreadyExistsError,
+    InvalidBusinessIdError,
+    OwnerEmailAlreadyExistsError,
+    provision_business,
+)
 from adaptive_agent.business_config.writer import (
     ConfigPatchError,
     update_business_config,
@@ -42,6 +48,13 @@ class LoginRequest(BaseModel):
 class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class SignupRequest(BaseModel):
+    business_id: str
+    display_name: str
+    owner_email: str
+    owner_password: str
 
 
 def _bearer_token(authorization: str | None) -> str:
@@ -79,6 +92,26 @@ def build_admin_router(
         if user is None or not verify_password(body.password, user.password_hash):
             raise HTTPException(status_code=401, detail="Invalid email or password")
         return LoginResponse(access_token=create_access_token(user))
+
+    @router.post("/auth/signup", response_model=LoginResponse, status_code=201)
+    def signup(body: SignupRequest) -> LoginResponse:
+        try:
+            owner = provision_business(
+                business_id=body.business_id,
+                display_name=body.display_name,
+                owner_email=body.owner_email,
+                owner_password=body.owner_password,
+                businesses_dir=businesses_dir,
+                admin_store=admin_store,
+            )
+        except InvalidBusinessIdError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except (BusinessAlreadyExistsError, OwnerEmailAlreadyExistsError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        admin_interface_layer.record_audit(
+            owner, body.business_id, "business.signup", after=owner.email
+        )
+        return LoginResponse(access_token=create_access_token(owner))
 
     @router.get("/businesses/{business_id}/config")
     def get_config(business_id: str, authorization: str | None = Header(default=None)) -> dict:

@@ -141,6 +141,80 @@ def test_patch_config_updates_persona_and_leaves_it_persisted(client):
     assert reread.json()["business_logic"]["persona"] == "Updated persona."
 
 
+def test_signup_creates_business_and_owner_and_logs_in(client):
+    response = client.post(
+        "/admin/api/v1/auth/signup",
+        json={
+            "business_id": "acme-cafe",
+            "display_name": "Acme Cafe",
+            "owner_email": "owner@acme.test",
+            "owner_password": "temp-pw",
+        },
+    )
+    assert response.status_code == 201
+    token = response.json()["access_token"]
+
+    config = client.get(
+        "/admin/api/v1/businesses/acme-cafe/config", headers=_auth_headers(token)
+    )
+    assert config.status_code == 200
+    assert config.json()["display_name"] == "Acme Cafe"
+
+
+def test_signup_default_llm_provider_is_google(client):
+    response = client.post(
+        "/admin/api/v1/auth/signup",
+        json={
+            "business_id": "acme-cafe",
+            "display_name": "Acme Cafe",
+            "owner_email": "owner@acme.test",
+            "owner_password": "temp-pw",
+        },
+    )
+    token = response.json()["access_token"]
+
+    config = client.get(
+        "/admin/api/v1/businesses/acme-cafe/config", headers=_auth_headers(token)
+    )
+    assert config.json()["llm"]["provider"] == "google"
+
+
+def test_signup_rejects_duplicate_business_id(client):
+    body = {
+        "business_id": "acme-cafe",
+        "display_name": "Acme Cafe",
+        "owner_email": "owner@acme.test",
+        "owner_password": "temp-pw",
+    }
+    client.post("/admin/api/v1/auth/signup", json=body)
+    duplicate = client.post(
+        "/admin/api/v1/auth/signup", json={**body, "owner_email": "other@acme.test"}
+    )
+    assert duplicate.status_code == 409
+
+
+def test_signup_rejects_duplicate_owner_email(client):
+    client.post(
+        "/admin/api/v1/auth/signup",
+        json={
+            "business_id": "acme-cafe",
+            "display_name": "Acme Cafe",
+            "owner_email": "owner@acme.test",
+            "owner_password": "temp-pw",
+        },
+    )
+    duplicate = client.post(
+        "/admin/api/v1/auth/signup",
+        json={
+            "business_id": "second-cafe",
+            "display_name": "Second Cafe",
+            "owner_email": "owner@acme.test",
+            "owner_password": "temp-pw",
+        },
+    )
+    assert duplicate.status_code == 409
+
+
 def test_audit_log_records_writes(client):
     token = _login(client, "owner@kc.test")
     headers = _auth_headers(token)

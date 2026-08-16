@@ -61,6 +61,18 @@ def _deep_merge(base: dict, patch: dict) -> dict:
     return merged
 
 
+def write_business_config_atomically(path: Path, raw: dict) -> None:
+    """Atomic write: a request reading business.yaml mid-write (the runtime
+    reloads it per-process, not per-request, but a future hot-reload path
+    or a concurrent admin write shouldn't ever see a half-written file).
+    Shared by update_business_config below and provisioning.py's
+    create_business_config, so there's exactly one place that writes this
+    file."""
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(yaml.safe_dump(raw, sort_keys=False))
+    os.replace(tmp_path, path)
+
+
 def update_business_config(path: Path, patch: dict) -> BusinessConfig:
     disallowed = _patch_keys(patch) - _EDITABLE_FIELDS
     if disallowed:
@@ -74,11 +86,5 @@ def update_business_config(path: Path, patch: dict) -> BusinessConfig:
     except ValidationError as exc:
         raise ConfigPatchError(f"Patched config is invalid:\n{exc}") from exc
 
-    # Atomic write: a request reading business.yaml mid-write (the runtime
-    # reloads it per-process, not per-request, but a future hot-reload path
-    # or a concurrent admin write shouldn't ever see a half-written file).
-    tmp_path = path.with_suffix(path.suffix + ".tmp")
-    tmp_path.write_text(yaml.safe_dump(merged_raw, sort_keys=False))
-    os.replace(tmp_path, path)
-
+    write_business_config_atomically(path, merged_raw)
     return updated
