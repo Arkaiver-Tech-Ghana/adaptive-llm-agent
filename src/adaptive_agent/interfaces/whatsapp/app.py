@@ -18,9 +18,12 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI
 
+from adaptive_agent.admin.interface_layer import AdminInterfaceLayer
+from adaptive_agent.admin.sqlite_store import SqliteAdminStore
 from adaptive_agent.interface_layer.dedupe import InMemoryDedupeStore
 from adaptive_agent.interface_layer.rate_limiter import RateLimiter
 from adaptive_agent.interface_layer.service import InterfaceLayer
+from adaptive_agent.interfaces.admin.router import build_admin_router
 from adaptive_agent.interfaces.whatsapp.registry import build_business_registry
 from adaptive_agent.interfaces.whatsapp.router import build_router
 
@@ -79,6 +82,23 @@ def create_app() -> FastAPI:
             verify_token=os.environ["WHATSAPP_VERIFY_TOKEN"],
             app_secret=os.environ["WHATSAPP_APP_SECRET"],
             access_token=os.environ["WHATSAPP_ACCESS_TOKEN"],
+        )
+    )
+
+    # Admin API (issue #17): one shared, platform-wide data/admin.sqlite3
+    # (ADR 0006), not one file per Business like the WhatsApp registry
+    # above. Cheap to build eagerly at startup, unlike business_registry —
+    # no NeMo Rail build involved — so it doesn't need the deferred-task
+    # dance _populate_business_registry uses.
+    session_db_dir = Path(os.environ.get("SESSION_DB_DIR", "data"))
+    admin_store = SqliteAdminStore(session_db_dir / "admin.sqlite3")
+    admin_interface_layer = AdminInterfaceLayer(admin_store)
+    fastapi_app.include_router(
+        build_admin_router(
+            admin_interface_layer=admin_interface_layer,
+            admin_store=admin_store,
+            businesses_dir=businesses_dir,
+            session_db_dir=session_db_dir,
         )
     )
 
