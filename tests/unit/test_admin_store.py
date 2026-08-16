@@ -56,6 +56,20 @@ def test_list_users_for_business_only_returns_that_businesss_users(tmp_path):
     assert {u.email for u in store.list_users_for_business("kampuscrave")} == {"a@kc.test"}
 
 
+def test_delete_user_removes_it(tmp_path):
+    store = _store(tmp_path)
+    store.upsert_user(
+        AdminUser(email="a@kc.test", password_hash="h", role=AdminRole.STAFF, business_id="kampuscrave")
+    )
+    store.delete_user("a@kc.test")
+    assert store.get_user_by_email("a@kc.test") is None
+
+
+def test_delete_user_is_safe_for_unknown_email(tmp_path):
+    store = _store(tmp_path)
+    store.delete_user("nobody@example.com")
+
+
 def test_persists_across_instances(tmp_path):
     db_path = tmp_path / "admin.sqlite3"
     user = AdminUser(email="a@b.test", password_hash="h", role=AdminRole.OWNER, business_id="kampuscrave")
