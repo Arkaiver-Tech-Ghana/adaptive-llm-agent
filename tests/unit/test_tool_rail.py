@@ -31,3 +31,12 @@ def test_unknown_tool_name_is_denied():
 
 def test_empty_tool_configs_denies_everything():
     assert decide(_call("check_room_availability"), []) == ToolRailDecision.DENY
+
+
+def test_disabled_tool_is_denied_even_without_confirmation():
+    disabled = ToolConfig(
+        name="check_room_availability",
+        description="Check room availability for given dates.",
+        enabled=False,
+    )
+    assert decide(_call("check_room_availability"), [disabled]) == ToolRailDecision.DENY

@@ -116,6 +116,7 @@ class AgentCore:
                 input_schema=t.input_schema,
             )
             for t in self.business_config.tools
+            if t.enabled
         ]
 
 
