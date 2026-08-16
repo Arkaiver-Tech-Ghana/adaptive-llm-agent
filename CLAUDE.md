@@ -74,6 +74,13 @@ process is part of what's being demonstrated, not overhead around it.
 Repo lives at `github.com/Arkaiver-Tech-Ghana/adaptive-llm-agent` (the
 Arkaiver org, not a personal account).
 
+### Ticket tracking
+
+Every change gets a corresponding GitHub Issue tracked on the repo's GitHub
+Project board — file/update the ticket as part of the change, not as an
+afterthought. This applies to features, fixes, and process changes alike;
+skipping the ticket is a process defect like skipping tests or CI.
+
 ### Branch strategy
 
 Four tiers. Ancestry (what each tier is cut from) runs
