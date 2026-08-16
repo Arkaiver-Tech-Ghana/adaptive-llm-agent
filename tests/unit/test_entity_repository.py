@@ -51,6 +51,14 @@ def test_create_table_rejects_invalid_identifier(tmp_path):
         repo.create_table(_notes_table(table_name="not a valid name"))
 
 
+def test_create_table_rejects_reserved_id_column(tmp_path):
+    repo = _repo(tmp_path)
+    with pytest.raises(InvalidTableConfigError):
+        repo.create_table(
+            _notes_table(columns=[ColumnDef(name="id", type=ColumnType.TEXT)])
+        )
+
+
 def test_create_table_rejects_tool_linked_table_missing_required_columns(tmp_path):
     repo = _repo(tmp_path)
     with pytest.raises(InvalidToolLinkedTableError):
