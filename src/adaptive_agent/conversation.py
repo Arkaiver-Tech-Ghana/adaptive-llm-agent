@@ -18,6 +18,7 @@ from adaptive_agent.agent_core import AgentCore, load_agent_core
 from adaptive_agent.business_config.schema import ToolConfig
 from adaptive_agent.customers.base import CustomerStore
 from adaptive_agent.customers.sqlite_store import SqliteCustomerStore
+from adaptive_agent.entities.sqlite_repository import SqliteEntityRepository
 from adaptive_agent.llm.base import LLMResponse
 from adaptive_agent.llm.tool_types import ToolCall
 from adaptive_agent.rails.base import RailChecker
@@ -28,6 +29,8 @@ from adaptive_agent.rails.tool_rail import decide as decide_tool_rail
 from adaptive_agent.session.base import ConfirmationRequest, SessionStore
 from adaptive_agent.session.sqlite_store import SqliteSessionStore
 from adaptive_agent.tools.base import ToolProvider
+from adaptive_agent.tools.composite_provider import CompositeToolProvider
+from adaptive_agent.tools.entity_crud_provider import EntityCrudToolProvider
 from adaptive_agent.tools.registry import build_tool_provider
 
 _YES_REPLIES = {"yes", "y", "yeah", "yep", "confirm", "ok", "okay"}
@@ -236,20 +239,26 @@ def _build_confirmation_prompt(tool_call: ToolCall, tool_configs: list[ToolConfi
 def load_conversation_runtime(business_config_path: Path) -> ConversationRuntime:
     """Loads a Business Config and wires a ready ConversationRuntime: an
     Agent Core (via load_agent_core), a per-Business ToolProvider (via
-    the tools registry), a SqliteSessionStore and SqliteCustomerStore
-    sharing one file per Business under SESSION_DB_DIR (``data/`` by
-    default), and a NemoRailChecker pointed at the repo-root nemo_rails/
-    config dir."""
+    the tools registry) composed with the generic entity-CRUD provider
+    every Business gets for its own Custom Tables (CompositeToolProvider —
+    see tools/entity_crud_provider.py), a SqliteSessionStore and
+    SqliteCustomerStore sharing one file per Business under SESSION_DB_DIR
+    (``data/`` by default), and a NemoRailChecker pointed at the repo-root
+    nemo_rails/ config dir."""
     agent_core = load_agent_core(business_config_path)
     nemo_config_dir = Path(__file__).resolve().parents[2] / "nemo_rails"
     rail_checker = NemoRailChecker(nemo_config_dir)
     session_db_dir = Path(os.environ.get("SESSION_DB_DIR", "data"))
     db_path = session_db_dir / f"{agent_core.business_config.business_id}.sqlite3"
+    base_provider = build_tool_provider(
+        agent_core.business_config.tool_provider, agent_core.business_config.storage, db_path
+    )
+    tool_provider = CompositeToolProvider(
+        [base_provider, EntityCrudToolProvider(SqliteEntityRepository(db_path))]
+    )
     return ConversationRuntime(
         agent_core=agent_core,
-        tool_provider=build_tool_provider(
-            agent_core.business_config.tool_provider, agent_core.business_config.storage, db_path
-        ),
+        tool_provider=tool_provider,
         session_store=SqliteSessionStore(db_path),
         rail_checker=rail_checker,
         customer_store=SqliteCustomerStore(db_path),
