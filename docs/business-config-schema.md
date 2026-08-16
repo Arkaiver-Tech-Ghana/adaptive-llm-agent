@@ -96,7 +96,7 @@ to `anthropic` needs no code change, just an `ANTHROPIC_API_KEY`.
 |---|---|---|---|
 | `type` | `"cli"` \| `"web"` \| `"whatsapp"` | — (required) | |
 | `enabled` | bool | `true` | |
-| `phone_number_id` | string \| null | `null` | whatsapp-only routing key. The only thing WhatsApp Cloud API's inbound webhook payload gives to route a message to the right Business (`entry[].changes[].value.metadata.phone_number_id`). `registry.py` raises `WhatsAppRegistryError` at startup if an enabled `whatsapp` entry is missing this — fail fast rather than silently drop a Business from routing. Routing data, not a secret — belongs in committed `business.yaml`. |
+| `phone_number_id` | string \| null | `null` | whatsapp-only routing key. The only thing WhatsApp Cloud API's inbound webhook payload gives to route a message to the right Business (`entry[].changes[].value.metadata.phone_number_id`). If an enabled `whatsapp` entry is missing this, or its value collides with another Business's, `registry.py` logs the problem and excludes only that Business from the registry — the rest of the registry still builds, since one Business's bad config must never take every other Business off WhatsApp routing. Routing data, not a secret — belongs in committed `business.yaml`. |
 
 ## `RailsConfig` (wired)
 
