@@ -1,7 +1,12 @@
 from pathlib import Path
 
+import pytest
+
 from adaptive_agent.menu.base import MenuItem
-from adaptive_agent.menu.sqlite_repository import SqliteMenuRepository
+from adaptive_agent.menu.sqlite_repository import (
+    InvalidMenuTableConfigError,
+    SqliteMenuRepository,
+)
 
 
 def _store(tmp_path: Path) -> SqliteMenuRepository:
@@ -48,3 +53,56 @@ def test_persists_across_instances(tmp_path):
 
     second = SqliteMenuRepository(db_path)
     assert second.get_item("Fries") == item
+
+
+def test_custom_table_and_column_names_round_trip(tmp_path):
+    repo = SqliteMenuRepository(
+        tmp_path / "menu.sqlite3",
+        table="products",
+        columns={
+            "name": "item_name",
+            "category": "cat",
+            "price": "unit_price",
+            "stock_quantity": "qty",
+        },
+    )
+    item = MenuItem(name="Fries", category="sides", price=2.5, stock_quantity=20)
+    repo.seed([item])
+    assert repo.get_item("Fries") == item
+
+
+def test_custom_table_is_actually_used_not_the_default(tmp_path):
+    db_path = tmp_path / "menu.sqlite3"
+    repo = SqliteMenuRepository(db_path, table="products")
+    repo.seed([MenuItem(name="Fries", category="sides", price=2.5, stock_quantity=20)])
+
+    default_named_repo = SqliteMenuRepository(db_path)  # reads "menu_items"
+    assert default_named_repo.get_item("Fries") is None
+
+
+def test_rejects_table_name_that_is_not_a_valid_identifier(tmp_path):
+    with pytest.raises(InvalidMenuTableConfigError):
+        SqliteMenuRepository(
+            tmp_path / "menu.sqlite3", table="menu_items; DROP TABLE menu_items;--"
+        )
+
+
+def test_rejects_column_name_that_is_not_a_valid_identifier(tmp_path):
+    with pytest.raises(InvalidMenuTableConfigError):
+        SqliteMenuRepository(
+            tmp_path / "menu.sqlite3",
+            columns={
+                "name": "name; --",
+                "category": "category",
+                "price": "price",
+                "stock_quantity": "stock_quantity",
+            },
+        )
+
+
+def test_rejects_columns_missing_a_required_field(tmp_path):
+    with pytest.raises(InvalidMenuTableConfigError):
+        SqliteMenuRepository(
+            tmp_path / "menu.sqlite3",
+            columns={"name": "name", "category": "category", "price": "price"},
+        )
