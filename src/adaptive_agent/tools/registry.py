@@ -1,10 +1,11 @@
-"""Maps a business_id to a concrete ToolProvider instance. Mirrors
-llm/registry.py's build_llm_provider pattern.
-
-Replaces load_conversation_runtime's old hardcoded ``InMemoryToolProvider()``
-for every Business — a DB-backed KampusCrave Tool can't share hotel's
-dict-backed provider, so each Business now selects its own provider here
-instead of the core conversation code special-casing a Business by name.
+"""Maps a Business Config's ``tool_provider`` string to a concrete
+ToolProvider instance. Mirrors llm/registry.py's build_llm_provider
+pattern: keyed by provider *type*, not business_id, so a new Business
+onboards by picking an existing type in its business.yaml — no code
+change — the same way a new Business picks ``llm.provider: google``
+without anyone touching llm/registry.py. A genuinely new backend shape
+still needs a new ToolProvider class and one new entry here; that's
+irreducible execution logic, not per-business hardcoding.
 """
 
 from collections.abc import Callable
@@ -21,7 +22,7 @@ class UnknownToolProviderError(Exception):
     pass
 
 
-def _build_kampuscrave_provider(
+def _build_sqlite_menu_provider(
     storage_config: StorageConfig, db_path: Path
 ) -> ToolProvider:
     return KampusCraveToolProvider(
@@ -34,19 +35,19 @@ def _build_kampuscrave_provider(
 
 
 _PROVIDERS: dict[str, Callable[[StorageConfig, Path], ToolProvider]] = {
-    "hotel": lambda storage_config, db_path: InMemoryToolProvider(),
-    "kampuscrave": _build_kampuscrave_provider,
+    "in_memory": lambda storage_config, db_path: InMemoryToolProvider(),
+    "sqlite_menu": _build_sqlite_menu_provider,
 }
 
 
 def build_tool_provider(
-    business_id: str, storage_config: StorageConfig, db_path: Path
+    provider_type: str, storage_config: StorageConfig, db_path: Path
 ) -> ToolProvider:
     try:
-        factory = _PROVIDERS[business_id]
+        factory = _PROVIDERS[provider_type]
     except KeyError:
         known = ", ".join(sorted(_PROVIDERS))
         raise UnknownToolProviderError(
-            f"Unknown tool provider for business '{business_id}'. Known businesses: {known}"
+            f"Unknown tool provider type '{provider_type}'. Known types: {known}"
         ) from None
     return factory(storage_config, db_path)

@@ -43,6 +43,7 @@ tools:
           description: The exact menu item name to look up.
       required: ["item_name"]
     requires_confirmation: false
+tool_provider: sqlite_menu
 storage:
   backend: sqlite
 auth:

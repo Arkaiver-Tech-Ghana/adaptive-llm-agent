@@ -142,6 +142,7 @@ class BusinessConfig(BaseModel):
     context: ContextConfig
     business_logic: BusinessLogicConfig
     tools: list[ToolConfig] = Field(default_factory=list)
+    tool_provider: str = "in_memory"
     storage: StorageConfig = Field(default_factory=StorageConfig)
     auth: AuthConfig = Field(default_factory=AuthConfig)
     frontend_adapters: list[FrontendAdapterConfig] = Field(

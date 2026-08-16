@@ -248,7 +248,7 @@ def load_conversation_runtime(business_config_path: Path) -> ConversationRuntime
     return ConversationRuntime(
         agent_core=agent_core,
         tool_provider=build_tool_provider(
-            agent_core.business_config.business_id, agent_core.business_config.storage, db_path
+            agent_core.business_config.tool_provider, agent_core.business_config.storage, db_path
         ),
         session_store=SqliteSessionStore(db_path),
         rail_checker=rail_checker,
