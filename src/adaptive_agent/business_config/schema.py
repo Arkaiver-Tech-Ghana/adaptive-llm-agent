@@ -7,9 +7,17 @@ Core — the rest (``tools``, ``storage``, ``auth``, ``frontend_adapters``)
 are declared-but-unwired stubs for Day 2/3.
 """
 
+import re
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+# SQL identifiers only — table/column names below get interpolated directly
+# into query strings (sqlite3 can't bind identifiers with `?`), so this is
+# the injection guard. Applies even though the source is a trusted config
+# file, not user input: defense in depth, and it turns a typo'd column name
+# into a fail-fast config error instead of a broken query at call time.
+_SQL_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 class LLMConfig(BaseModel):
@@ -47,11 +55,46 @@ class ToolConfig(BaseModel):
 
 
 class StorageConfig(BaseModel):
-    """Stub. See docs/adr/0003 for the database-id + schema-identity design."""
+    """``backend``/``database_id``/``schema_identity`` are a stub — see
+    docs/adr/0003 for the database-id + schema-identity design.
+
+    ``table``/``columns`` are wired: they let a Business point a SQL-backed
+    repository (e.g. SqliteMenuRepository) at whatever table/column names
+    its own database actually uses, so renaming a table or column is a
+    Business Config edit, not a source change. Generic string->string here
+    on purpose — this type doesn't know which logical fields any given
+    repository needs; the repository validates ``columns`` has the keys it
+    requires (see SqliteMenuRepository).
+    """
 
     backend: Literal["none", "postgres", "sqlite"] = "none"
     database_id: str | None = None
     schema_identity: str | None = None
+    table: str | None = None
+    columns: dict[str, str] | None = None
+
+    @field_validator("table")
+    @classmethod
+    def _table_is_valid_identifier(cls, value: str | None) -> str | None:
+        if value is not None and not _SQL_IDENTIFIER_RE.match(value):
+            raise ValueError(
+                f"storage.table must be a valid SQL identifier, got {value!r}"
+            )
+        return value
+
+    @field_validator("columns")
+    @classmethod
+    def _columns_are_valid_identifiers(
+        cls, value: dict[str, str] | None
+    ) -> dict[str, str] | None:
+        if value is not None:
+            for field_name, column_name in value.items():
+                if not _SQL_IDENTIFIER_RE.match(column_name):
+                    raise ValueError(
+                        f"storage.columns[{field_name!r}] must be a valid SQL identifier, "
+                        f"got {column_name!r}"
+                    )
+        return value
 
 
 class AuthConfig(BaseModel):
