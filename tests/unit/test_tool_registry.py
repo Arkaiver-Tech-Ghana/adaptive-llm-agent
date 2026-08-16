@@ -10,21 +10,21 @@ from adaptive_agent.tools.registry import UnknownToolProviderError, build_tool_p
 _DEFAULT_STORAGE = StorageConfig()
 
 
-def test_build_tool_provider_for_hotel_returns_in_memory_provider(tmp_path):
+def test_build_tool_provider_for_in_memory_type_returns_in_memory_provider(tmp_path):
     provider = build_tool_provider(
-        "hotel", _DEFAULT_STORAGE, tmp_path / "hotel.sqlite3"
+        "in_memory", _DEFAULT_STORAGE, tmp_path / "hotel.sqlite3"
     )
     assert isinstance(provider, InMemoryToolProvider)
 
 
-def test_build_tool_provider_for_kampuscrave_returns_kampuscrave_provider(tmp_path):
+def test_build_tool_provider_for_sqlite_menu_type_returns_kampuscrave_provider(tmp_path):
     provider = build_tool_provider(
-        "kampuscrave", _DEFAULT_STORAGE, tmp_path / "kampuscrave.sqlite3"
+        "sqlite_menu", _DEFAULT_STORAGE, tmp_path / "kampuscrave.sqlite3"
     )
     assert isinstance(provider, KampusCraveToolProvider)
 
 
-def test_build_tool_provider_for_kampuscrave_honors_custom_table_and_columns(tmp_path):
+def test_build_tool_provider_for_sqlite_menu_honors_custom_table_and_columns(tmp_path):
     storage_config = StorageConfig(
         table="products",
         columns={
@@ -36,7 +36,7 @@ def test_build_tool_provider_for_kampuscrave_honors_custom_table_and_columns(tmp
     )
     db_path = tmp_path / "kampuscrave.sqlite3"
 
-    provider = build_tool_provider("kampuscrave", storage_config, db_path)
+    provider = build_tool_provider("sqlite_menu", storage_config, db_path)
     assert isinstance(provider, KampusCraveToolProvider)
     assert isinstance(provider.menu_repository, SqliteMenuRepository)
 
@@ -54,8 +54,8 @@ def test_build_tool_provider_for_kampuscrave_honors_custom_table_and_columns(tmp
     }
 
 
-def test_unknown_business_id_raises_helpful_error(tmp_path):
-    with pytest.raises(UnknownToolProviderError, match="unknown-biz"):
+def test_unknown_provider_type_raises_helpful_error(tmp_path):
+    with pytest.raises(UnknownToolProviderError, match="unknown-type"):
         build_tool_provider(
-            "unknown-biz", _DEFAULT_STORAGE, tmp_path / "unknown.sqlite3"
+            "unknown-type", _DEFAULT_STORAGE, tmp_path / "unknown.sqlite3"
         )
