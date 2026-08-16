@@ -2,6 +2,8 @@
 (CONTEXT.md; this project's name for NeMo's retrieval rail).
 """
 
+from typing import Any
+
 from adaptive_agent.context.base import ContextDocument
 
 
@@ -17,3 +19,14 @@ def check_data_access(
     per-customer data.
     """
     return context_docs
+
+
+def check_tool_data_access(tool_result: Any, business_id: str) -> Any:
+    """Same checkpoint as check_data_access, for data a read-only Tool
+    pulled from a live store (e.g. KampusCrave's check_menu_item) rather
+    than from static context files — a live DB lookup is retrieval too,
+    per issue #16, so it goes through the Data Rail, not just the Tool
+    Rail's ALLOW/confirmation gate. Identity passthrough today for the
+    same reason as check_data_access: no per-customer RLS yet (ADR 0001).
+    """
+    return tool_result

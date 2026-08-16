@@ -79,8 +79,9 @@ tools:
       required: ["room_type", "check_in", "check_out", "guest_name"]
     requires_confirmation: true
 
+tool_provider: in_memory
 storage:
-  backend: none
+  backend: sqlite
 auth:
   type: none
 frontend_adapters:

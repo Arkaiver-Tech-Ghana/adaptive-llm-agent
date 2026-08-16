@@ -4,9 +4,10 @@ Core (CLAUDE.md's "Rails" section — "nothing reaches or leaves unchecked").
 Lives outside ``agent_core.py`` on purpose: Rails wrap the Agent Core, they
 aren't part of it. ``ConversationRuntime.handle_message`` is the single
 entry point every Frontend Adapter (today: the CLI) calls per inbound
-message; it owns the full per-turn flow — Input Rail, pending-Confirmation
-resolution, Data Rail, the Agent Core turn itself, Tool Rail, Output Rail,
-and Session history — so no interface layer has to re-implement any of it.
+message; it owns the full per-turn flow — Customer visit bookkeeping,
+Input Rail, pending-Confirmation resolution, Data Rail, the Agent Core
+turn itself, Tool Rail, Output Rail, and Session history — so no interface
+layer has to re-implement any of it.
 """
 
 import os
@@ -15,17 +16,19 @@ from typing import Literal
 
 from adaptive_agent.agent_core import AgentCore, load_agent_core
 from adaptive_agent.business_config.schema import ToolConfig
+from adaptive_agent.customers.base import CustomerStore
+from adaptive_agent.customers.sqlite_store import SqliteCustomerStore
 from adaptive_agent.llm.base import LLMResponse
 from adaptive_agent.llm.tool_types import ToolCall
 from adaptive_agent.rails.base import RailChecker
-from adaptive_agent.rails.data_rail import check_data_access
+from adaptive_agent.rails.data_rail import check_data_access, check_tool_data_access
 from adaptive_agent.rails.nemo_checker import NemoRailChecker
 from adaptive_agent.rails.tool_rail import ToolRailDecision
 from adaptive_agent.rails.tool_rail import decide as decide_tool_rail
 from adaptive_agent.session.base import ConfirmationRequest, SessionStore
 from adaptive_agent.session.sqlite_store import SqliteSessionStore
 from adaptive_agent.tools.base import ToolProvider
-from adaptive_agent.tools.in_memory_provider import InMemoryToolProvider
+from adaptive_agent.tools.registry import build_tool_provider
 
 _YES_REPLIES = {"yes", "y", "yeah", "yep", "confirm", "ok", "okay"}
 _NO_REPLIES = {"no", "n", "nope", "cancel"}
@@ -61,22 +64,34 @@ class ConversationRuntime:
         tool_provider: ToolProvider,
         session_store: SessionStore,
         rail_checker: RailChecker,
+        customer_store: CustomerStore,
     ):
         self.agent_core = agent_core
         self.tool_provider = tool_provider
         self.session_store = session_store
         self.rail_checker = rail_checker
+        self.customer_store = customer_store
 
     def handle_message(self, session_key: str, user_message: str) -> str:
         business_config = self.agent_core.business_config
 
-        # 1. Input Rail always runs first, even on a bare "yes"/"no" reply
-        # while a Confirmation is pending — "nothing reaches or leaves
-        # unchecked" is not optional. A blocked message never reaches the
-        # Agent Core (or the pending-confirmation resolution below) and its
-        # refusal text skips the Output Rail: that text IS what the Input
-        # Rail already decided the Customer should see, so re-checking it
-        # as output would be circular, not "leaving unchecked".
+        # 0. Record the visit before anything else, including the Input
+        # Rail — pure bookkeeping (first/last_seen only), no content is
+        # exposed either way, so a blocked/adversarial message still
+        # counts as a visit. This is the one thing in handle_message that
+        # deliberately runs ahead of the Input Rail; everything else
+        # respects rule 1 below.
+        customer_id = session_key.split(":", 1)[1]
+        self.customer_store.record_visit(customer_id)
+
+        # 1. Input Rail always runs first among content-bearing steps,
+        # even on a bare "yes"/"no" reply while a Confirmation is pending
+        # — "nothing reaches or leaves unchecked" is not optional. A
+        # blocked message never reaches the Agent Core (or the
+        # pending-confirmation resolution below) and its refusal text
+        # skips the Output Rail: that text IS what the Input Rail already
+        # decided the Customer should see, so re-checking it as output
+        # would be circular, not "leaving unchecked".
         if business_config.rails.input_enabled:
             input_verdict = self.rail_checker.check_input(user_message)
             if not input_verdict.allowed:
@@ -176,6 +191,11 @@ class ConversationRuntime:
 
         if tool_decision == ToolRailDecision.ALLOW:
             tool_result = self.tool_provider.call(tool_call.name, tool_call.arguments)
+            # Data Rail checkpoint: a read-only Tool call is retrieval too
+            # (issue #16) — same passthrough-today checkpoint as the
+            # context-doc path in _fresh_turn, applied to the Tool's
+            # result before it reaches the Agent Core.
+            tool_result = check_tool_data_access(tool_result, business_config.business_id)
             result = self.agent_core.continue_with_tool_result(history, tool_call, tool_result)
             return result.text
 
@@ -215,10 +235,11 @@ def _build_confirmation_prompt(tool_call: ToolCall, tool_configs: list[ToolConfi
 
 def load_conversation_runtime(business_config_path: Path) -> ConversationRuntime:
     """Loads a Business Config and wires a ready ConversationRuntime: an
-    Agent Core (via load_agent_core), an InMemoryToolProvider, a
-    SqliteSessionStore (one file per Business, under SESSION_DB_DIR —
-    ``data/`` by default), and a NemoRailChecker pointed at the repo-root
-    nemo_rails/ config dir."""
+    Agent Core (via load_agent_core), a per-Business ToolProvider (via
+    the tools registry), a SqliteSessionStore and SqliteCustomerStore
+    sharing one file per Business under SESSION_DB_DIR (``data/`` by
+    default), and a NemoRailChecker pointed at the repo-root nemo_rails/
+    config dir."""
     agent_core = load_agent_core(business_config_path)
     nemo_config_dir = Path(__file__).resolve().parents[2] / "nemo_rails"
     rail_checker = NemoRailChecker(nemo_config_dir)
@@ -226,7 +247,10 @@ def load_conversation_runtime(business_config_path: Path) -> ConversationRuntime
     db_path = session_db_dir / f"{agent_core.business_config.business_id}.sqlite3"
     return ConversationRuntime(
         agent_core=agent_core,
-        tool_provider=InMemoryToolProvider(),
+        tool_provider=build_tool_provider(
+            agent_core.business_config.tool_provider, agent_core.business_config.storage, db_path
+        ),
         session_store=SqliteSessionStore(db_path),
         rail_checker=rail_checker,
+        customer_store=SqliteCustomerStore(db_path),
     )

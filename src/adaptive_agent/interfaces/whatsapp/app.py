@@ -17,10 +17,14 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
+from adaptive_agent.admin.interface_layer import AdminInterfaceLayer
+from adaptive_agent.admin.sqlite_store import SqliteAdminStore
 from adaptive_agent.interface_layer.dedupe import InMemoryDedupeStore
 from adaptive_agent.interface_layer.rate_limiter import RateLimiter
 from adaptive_agent.interface_layer.service import InterfaceLayer
+from adaptive_agent.interfaces.admin.router import build_admin_router
 from adaptive_agent.interfaces.whatsapp.registry import build_business_registry
 from adaptive_agent.interfaces.whatsapp.router import build_router
 
@@ -69,6 +73,26 @@ def create_app() -> FastAPI:
 
     fastapi_app = FastAPI(title="Adaptive Agent — WhatsApp Webhook")
 
+    # The admin frontend (adaptive-llm-agent-admin) is a separate, cross-
+    # origin Vercel deploy calling /admin/api/v1/* straight from the
+    # browser — without CORS every such call is blocked before it reaches
+    # these routes. The WhatsApp webhook below is server-to-server (Meta ->
+    # this API), never browser-invoked, so applying this app-wide doesn't
+    # affect it: no Origin header, no CORS check. allow_credentials stays
+    # False since auth is a bearer token in a header, not a cookie.
+    admin_origins = [
+        origin.strip()
+        for origin in os.environ.get("ADMIN_CORS_ORIGINS", "http://localhost:5173").split(",")
+        if origin.strip()
+    ]
+    fastapi_app.add_middleware(
+        CORSMiddleware,
+        allow_origins=admin_origins,
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "PATCH", "DELETE"],
+        allow_headers=["Authorization", "Content-Type"],
+    )
+
     @fastapi_app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
@@ -79,6 +103,23 @@ def create_app() -> FastAPI:
             verify_token=os.environ["WHATSAPP_VERIFY_TOKEN"],
             app_secret=os.environ["WHATSAPP_APP_SECRET"],
             access_token=os.environ["WHATSAPP_ACCESS_TOKEN"],
+        )
+    )
+
+    # Admin API (issue #17): one shared, platform-wide data/admin.sqlite3
+    # (ADR 0006), not one file per Business like the WhatsApp registry
+    # above. Cheap to build eagerly at startup, unlike business_registry —
+    # no NeMo Rail build involved — so it doesn't need the deferred-task
+    # dance _populate_business_registry uses.
+    session_db_dir = Path(os.environ.get("SESSION_DB_DIR", "data"))
+    admin_store = SqliteAdminStore(session_db_dir / "admin.sqlite3")
+    admin_interface_layer = AdminInterfaceLayer(admin_store)
+    fastapi_app.include_router(
+        build_admin_router(
+            admin_interface_layer=admin_interface_layer,
+            admin_store=admin_store,
+            businesses_dir=businesses_dir,
+            session_db_dir=session_db_dir,
         )
     )
 

@@ -52,3 +52,18 @@ uv run pytest -m integration      # integration test only, requires GOOGLE_API_K
 ```
 
 See `docs/business-config-schema.md` for the Business Config field reference.
+
+## Known limitations
+
+- **Input Rail is single-turn, not conversation-aware.** `RailChecker.check_input`
+  (called from `conversation.py`) only ever sees the current message — NeMo's
+  `self_check_input` flow has no prior turns to reason about. It catches an
+  injection attempt that looks bad on its own, but a multi-turn "build
+  innocuous rapport, then strike" escalation is structurally invisible to it,
+  regardless of which model backs the check. Red-teamed against 17 single-turn
+  attacks (direct overrides, roleplay/authority hijacks, base64/ROT13-encoded
+  payloads, fake conversation-boundary spoofing) with zero misses and zero
+  false positives on `gemini-flash-lite-latest` — see the test suite for the
+  scripted case. Multi-turn defense would mean passing the last N turns into
+  the rail check; not implemented, since it's out of scope for the PRD's P0
+  criterion (single known-injection message → rejected).

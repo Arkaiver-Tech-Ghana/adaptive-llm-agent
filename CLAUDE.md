@@ -74,26 +74,41 @@ process is part of what's being demonstrated, not overhead around it.
 Repo lives at `github.com/Arkaiver-Tech-Ghana/adaptive-llm-agent` (the
 Arkaiver org, not a personal account).
 
+### Ticket tracking
+
+Every change gets a corresponding GitHub Issue tracked on the repo's GitHub
+Project board — file/update the ticket as part of the change, not as an
+afterthought. This applies to features, fixes, and process changes alike;
+skipping the ticket is a process defect like skipping tests or CI.
+
 ### Branch strategy
 
-Four tiers — don't merge a feature branch straight into `main` once more
-than one feature needs to land before a version boundary:
+Four tiers. Ancestry (what each tier is cut from) runs
+`main` -> `<version>` -> `staging/<version>` -> `feature/<version>/*` —
+don't merge a feature branch straight into `main` once more than one
+feature needs to land before a version boundary:
 
-- **`feature/*`** — one branch per feature (e.g. `day-1-agent-core`).
-  Merges into the current **staging** branch, not `main`.
-- **`staging/<version>`** — integration branch for an upcoming version
-  (e.g. `staging/v1`); where multiple features land and get tested
-  together.
-- **version branch** (e.g. `v1`) — a stabilized branch for a released
-  version, cut from staging once it's ready.
+- **`<version>`** (e.g. `v2`) — cut directly from `main` when work on that
+  version starts, not cut from staging at the end. Stabilized and merged
+  back into `main` at release.
+- **`staging/<version>`** (e.g. `staging/v2`) — integration branch for that
+  version, cut from the version branch (not from `main`); where multiple
+  features land and get tested together before promotion.
+- **`feature/<version>/<name>`** (e.g. `feature/v2/some-feature`) — one
+  branch per feature, namespaced under its version so feature names don't
+  collide across versions in flight. Merges into that version's
+  `staging/<version>`, not `main`.
 - **`main`** — the top-level stable branch, updated from a version branch
   at release boundaries.
 
-Day 1 shipped as a single feature straight into `main` (no staging branch
-existed yet, and it was the only feature in flight) — that's the exception,
-not the pattern. Day 1–3 of the PRD's sprint are all v1, so the whole sprint
-stages through one branch: `staging/v1`, cut from `main` once Day 2 started
-landing multiple features at once (rails, tool confirmation, hotel config).
+This is the standard starting with v2. v1 shipped under an earlier variant
+of this scheme — its version branch was cut from `staging/v1` at the end
+rather than from `main` up front, and its feature branches weren't
+version-namespaced (`feature/day-1-agent-core`, not `feature/v1/...`). Day
+1 itself shipped as a single feature straight into `main` (no staging
+branch existed yet, and it was the only feature in flight) — an exception
+to even that earlier scheme, not a pattern to repeat. That merged
+`staging/v1` history is left as-is, not retroactively restructured.
 
 ## Data model notes
 

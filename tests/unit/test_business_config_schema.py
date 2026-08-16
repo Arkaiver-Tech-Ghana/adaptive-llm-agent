@@ -117,3 +117,48 @@ def test_tool_config_input_schema_defaults_to_empty_dict():
     }
     config = BusinessConfig.model_validate(data)
     assert config.tools[0].input_schema == {}
+
+
+def test_storage_table_and_columns_default_to_none():
+    config = BusinessConfig.model_validate(VALID_MINIMAL)
+    assert config.storage.table is None
+    assert config.storage.columns is None
+
+
+def test_storage_table_and_columns_parse_when_given():
+    data = {
+        **VALID_MINIMAL,
+        "storage": {
+            "backend": "sqlite",
+            "table": "products",
+            "columns": {
+                "name": "item_name",
+                "category": "cat",
+                "price": "unit_price",
+                "stock_quantity": "qty",
+            },
+        },
+    }
+    config = BusinessConfig.model_validate(data)
+    assert config.storage.table == "products"
+    assert config.storage.columns == {
+        "name": "item_name",
+        "category": "cat",
+        "price": "unit_price",
+        "stock_quantity": "qty",
+    }
+
+
+def test_storage_table_rejects_non_identifier():
+    data = {
+        **VALID_MINIMAL,
+        "storage": {"table": "menu_items; DROP TABLE menu_items;--"},
+    }
+    with pytest.raises(ValidationError):
+        BusinessConfig.model_validate(data)
+
+
+def test_storage_columns_rejects_non_identifier_value():
+    data = {**VALID_MINIMAL, "storage": {"columns": {"name": "name; --"}}}
+    with pytest.raises(ValidationError):
+        BusinessConfig.model_validate(data)

@@ -23,7 +23,8 @@ disagree, the schema file wins.
 | `context` | [`ContextConfig`](#contextconfig) | yes | wired | Where this Business's grounding documents live. |
 | `business_logic` | [`BusinessLogicConfig`](#businesslogicconfig) | yes | wired | Persona, scope, tone. |
 | `tools` | list of [`ToolConfig`](#toolconfig) | no (default `[]`) | wired | Read by `AgentCore.tool_specs` (offered to the LLM) and the Tool Rail (`requires_confirmation`), both invoked from `ConversationRuntime.handle_message`. |
-| `storage` | [`StorageConfig`](#storageconfig) | no | stub | See `docs/adr/0003` for the design this anticipates. |
+| `tool_provider` | string | `"in_memory"` | wired | Looked up in `tools/registry.py`'s provider map to select this Business's `ToolProvider` backend. Keyed by provider *type*, not `business_id` — a new Business onboards onto an existing type (e.g. `sqlite_menu`, tuned via `storage.table`/`storage.columns`) with a yaml-only change. A genuinely new backend shape still needs a new `ToolProvider` class and one registry entry. Unknown type → `UnknownToolProviderError`. |
+| `storage` | [`StorageConfig`](#storageconfig) | no | `backend`/`database_id`/`schema_identity` stub, `table`/`columns` wired | See `docs/adr/0003` for the stub fields' design. |
 | `auth` | [`AuthConfig`](#authconfig) | no | stub | Ships with the Interface Layer on Day 3. |
 | `frontend_adapters` | list of [`FrontendAdapterConfig`](#frontendadapterconfig) | no (default: one `cli` entry) | `cli` informational, `whatsapp` wired | `whatsapp` entries are read by `interfaces/whatsapp/registry.py` at startup to route inbound webhook traffic; `cli` stays informational (the CLI harness ignores this list). |
 | `rails` | [`RailsConfig`](#railsconfig) | no (defaults below) | wired | Per-Business Input/Output Rail toggles, read by `ConversationRuntime.handle_message` to decide whether to call the `RailChecker` at all for this Business. See `docs/adr/0004`. |
@@ -74,13 +75,15 @@ to `anthropic` needs no code change, just an `ANTHROPIC_API_KEY`.
 | `mcp_endpoint` | string \| null | `null` | Per the PRD, tools are MCP-compatible **in interface shape only** — `ToolProvider.call(name, arguments)` mirrors an MCP tool call, and `input_schema` is JSON-Schema like MCP's own tool descriptors. No real MCP wire-protocol server/client is stood up this sprint; this field is declared but unused — swapping in an MCP-backed `ToolProvider` later wouldn't require a schema change, but nothing today speaks the MCP protocol over this endpoint. |
 | `requires_confirmation` | bool | `false` | Read by the Tool Rail (`rails/tool_rail.py`'s `decide()`) to choose `ALLOW` vs `REQUIRE_CONFIRMATION`. A Tool Rail `REQUIRE_CONFIRMATION` verdict stores a Confirmation Request in the Session until the Customer replies yes/no. |
 
-## `StorageConfig` (stub)
+## `StorageConfig` (`backend`/`database_id`/`schema_identity` stub, `table`/`columns` wired)
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
-| `backend` | `"none"` \| `"postgres"` \| `"sqlite"` | `"none"` | |
+| `backend` | `"none"` \| `"postgres"` \| `"sqlite"` | `"none"` | Not read by code — every Business's `ConversationRuntime` always gets a `SqliteSessionStore` + `SqliteCustomerStore` (plus, for `kampuscrave`, a `SqliteMenuRepository`) regardless of this value. `"sqlite"` here is truth-in-config only, documenting that this Business's session/customer/tool data genuinely lives in SQLite today — not a runtime switch. Both shipped Businesses (`hotel`, `kampuscrave`) are `"sqlite"` as of the live-menu-tool change; `"none"` is left as the schema default for a not-yet-onboarded Business. |
 | `database_id` | string \| null | `null` | Part of the `database-id + schema-identity` key from `docs/adr/0003`. |
 | `schema_identity` | string \| null | `null` | See above. |
+| `table` | string \| null | `null` | Read by `tools/registry.py`'s `sqlite_menu` factory and passed to `SqliteMenuRepository(table=...)`. `null` falls back to `SqliteMenuRepository.DEFAULT_TABLE` (`"menu_items"`). Lets a Business point the menu tool at whatever table its own database already uses — a table rename is a Business Config edit, not a source change. Must be a valid SQL identifier (`^[A-Za-z_][A-Za-z0-9_]*$`); a `BusinessConfigError` at load time otherwise, since this string is interpolated straight into SQL (sqlite3 can't bind identifiers with `?`). |
+| `columns` | dict[string, string] \| null | `null` | Same idea, per-column: maps the logical fields `SqliteMenuRepository` needs (`name`, `category`, `price`, `stock_quantity`) to this Business's actual column names. `null` falls back to `SqliteMenuRepository.DEFAULT_COLUMNS` (identity mapping). If given, must supply exactly those four keys, each a valid SQL identifier — `SqliteMenuRepository` raises `InvalidMenuTableConfigError` otherwise (re-validated there, not just at config load, since the repository can be constructed directly). This type is a generic string->string map on purpose: `StorageConfig` doesn't know which fields any given repository needs, only the repository does. |
 
 ## `AuthConfig` (stub)
 
@@ -94,7 +97,7 @@ to `anthropic` needs no code change, just an `ANTHROPIC_API_KEY`.
 |---|---|---|---|
 | `type` | `"cli"` \| `"web"` \| `"whatsapp"` | — (required) | |
 | `enabled` | bool | `true` | |
-| `phone_number_id` | string \| null | `null` | whatsapp-only routing key. The only thing WhatsApp Cloud API's inbound webhook payload gives to route a message to the right Business (`entry[].changes[].value.metadata.phone_number_id`). `registry.py` raises `WhatsAppRegistryError` at startup if an enabled `whatsapp` entry is missing this — fail fast rather than silently drop a Business from routing. Routing data, not a secret — belongs in committed `business.yaml`. |
+| `phone_number_id` | string \| null | `null` | whatsapp-only routing key. The only thing WhatsApp Cloud API's inbound webhook payload gives to route a message to the right Business (`entry[].changes[].value.metadata.phone_number_id`). If an enabled `whatsapp` entry is missing this, or its value collides with another Business's, `registry.py` logs the problem and excludes only that Business from the registry — the rest of the registry still builds, since one Business's bad config must never take every other Business off WhatsApp routing. Routing data, not a secret — belongs in committed `business.yaml`. |
 
 ## `RailsConfig` (wired)
 
