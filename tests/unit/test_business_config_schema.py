@@ -119,6 +119,32 @@ def test_tool_config_input_schema_defaults_to_empty_dict():
     assert config.tools[0].input_schema == {}
 
 
+def test_tool_config_accepts_an_http_mcp_endpoint():
+    data = {
+        **VALID_MINIMAL,
+        "tools": [
+            {
+                "name": "book_room",
+                "description": "Book a room.",
+                "mcp_endpoint": "https://mcp.example.com/mcp",
+            }
+        ],
+    }
+    config = BusinessConfig.model_validate(data)
+    assert config.tools[0].mcp_endpoint == "https://mcp.example.com/mcp"
+
+
+def test_tool_config_rejects_a_non_http_mcp_endpoint():
+    data = {
+        **VALID_MINIMAL,
+        "tools": [
+            {"name": "book_room", "description": "Book a room.", "mcp_endpoint": "not-a-url"}
+        ],
+    }
+    with pytest.raises(ValidationError):
+        BusinessConfig.model_validate(data)
+
+
 def test_storage_table_and_columns_default_to_none():
     config = BusinessConfig.model_validate(VALID_MINIMAL)
     assert config.storage.table is None

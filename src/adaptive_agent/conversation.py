@@ -28,6 +28,8 @@ from adaptive_agent.rails.tool_rail import decide as decide_tool_rail
 from adaptive_agent.session.base import ConfirmationRequest, SessionStore
 from adaptive_agent.session.sqlite_store import SqliteSessionStore
 from adaptive_agent.tools.base import ToolProvider
+from adaptive_agent.tools.composite_provider import CompositeToolProvider
+from adaptive_agent.tools.mcp_provider import MCPToolProvider
 from adaptive_agent.tools.registry import build_tool_provider
 
 _YES_REPLIES = {"yes", "y", "yeah", "yep", "confirm", "ok", "okay"}
@@ -235,8 +237,10 @@ def _build_confirmation_prompt(tool_call: ToolCall, tool_configs: list[ToolConfi
 
 def load_conversation_runtime(business_config_path: Path) -> ConversationRuntime:
     """Loads a Business Config and wires a ready ConversationRuntime: an
-    Agent Core (via load_agent_core), a per-Business ToolProvider (via
-    the tools registry), a SqliteSessionStore and SqliteCustomerStore
+    Agent Core (via load_agent_core), a per-Business ToolProvider (via the
+    tools registry) composed with an MCP provider for whichever of the
+    Business's Tools declare ``mcp_endpoint`` (CompositeToolProvider — see
+    tools/mcp_provider.py), a SqliteSessionStore and SqliteCustomerStore
     sharing one file per Business under SESSION_DB_DIR (``data/`` by
     default), and a NemoRailChecker pointed at the repo-root nemo_rails/
     config dir."""
@@ -245,11 +249,16 @@ def load_conversation_runtime(business_config_path: Path) -> ConversationRuntime
     rail_checker = NemoRailChecker(nemo_config_dir)
     session_db_dir = Path(os.environ.get("SESSION_DB_DIR", "data"))
     db_path = session_db_dir / f"{agent_core.business_config.business_id}.sqlite3"
+    base_provider = build_tool_provider(
+        agent_core.business_config.tool_provider, agent_core.business_config.storage, db_path
+    )
+    mcp_endpoints = {
+        t.name: t.mcp_endpoint for t in agent_core.business_config.tools if t.mcp_endpoint
+    }
+    tool_provider = CompositeToolProvider([base_provider, MCPToolProvider(mcp_endpoints)])
     return ConversationRuntime(
         agent_core=agent_core,
-        tool_provider=build_tool_provider(
-            agent_core.business_config.tool_provider, agent_core.business_config.storage, db_path
-        ),
+        tool_provider=tool_provider,
         session_store=SqliteSessionStore(db_path),
         rail_checker=rail_checker,
         customer_store=SqliteCustomerStore(db_path),
