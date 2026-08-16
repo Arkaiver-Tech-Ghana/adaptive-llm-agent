@@ -44,6 +44,14 @@ def test_update_persona_persists_and_leaves_other_fields_untouched(tmp_path):
     assert reloaded.display_name == "KampusCrave"
 
 
+def test_update_display_name(tmp_path):
+    path = _write_config(tmp_path)
+    updated = update_business_config(path, {"display_name": "Renamed Cafe"})
+
+    assert updated.display_name == "Renamed Cafe"
+    assert load_business_config(path).display_name == "Renamed Cafe"
+
+
 def test_update_tools_replaces_the_whole_list(tmp_path):
     path = _write_config(tmp_path)
     new_tools = [{"name": "book_room", "description": "Book a room.", "requires_confirmation": True}]

@@ -21,6 +21,7 @@ from adaptive_agent.business_config.schema import BusinessConfig
 # patch is an admin-immutable field — reject rather than silently apply.
 _EDITABLE_FIELDS = frozenset(
     {
+        "display_name",
         "business_logic.persona",
         "business_logic.tone",
         "business_logic.scope_instructions",
