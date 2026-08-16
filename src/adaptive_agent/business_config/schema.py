@@ -21,8 +21,12 @@ _SQL_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 class LLMConfig(BaseModel):
-    provider: str = "anthropic"
-    model: str = "claude-sonnet-5"
+    # Google is this project's default provider (no Anthropic account
+    # backs this deployment) — every shipped Business (kampuscrave, hotel)
+    # already sets these explicitly; this default only matters for a
+    # self-serve-provisioned Business that hasn't customized it yet.
+    provider: str = "google"
+    model: str = "gemini-flash-lite-latest"
     max_tokens: int = 1024
     effort: Literal["low", "medium", "high", "xhigh", "max"] | None = "medium"
 
@@ -58,13 +62,13 @@ class StorageConfig(BaseModel):
     """``backend``/``database_id``/``schema_identity`` are a stub — see
     docs/adr/0003 for the database-id + schema-identity design.
 
-    ``table``/``columns`` are wired: they let a Business point a SQL-backed
-    repository (e.g. SqliteMenuRepository) at whatever table/column names
-    its own database actually uses, so renaming a table or column is a
-    Business Config edit, not a source change. Generic string->string here
-    on purpose — this type doesn't know which logical fields any given
-    repository needs; the repository validates ``columns`` has the keys it
-    requires (see SqliteMenuRepository).
+    ``table``/``columns`` are legacy: they let a fixed-schema repository
+    (e.g. the old SqliteMenuRepository) point at whatever table/column
+    names a Business's database actually used. Superseded by the generic
+    entity/table system (``entities.TableDef``, owner-managed via the admin
+    UI, not Business Config) — see ADR 0008. Left in place, not removed,
+    since existing Business Config files still validate against them; full
+    removal is a follow-up, not required now.
     """
 
     backend: Literal["none", "postgres", "sqlite"] = "none"

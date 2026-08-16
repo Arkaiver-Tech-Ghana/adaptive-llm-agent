@@ -70,7 +70,7 @@ class AdminInterfaceLayer:
 
         # PLATFORM_OPERATOR is inherently cross-Business (ADR 0006) — routes
         # that admit it into allowed_roles are read-only by construction, so
-        # no business_id match is required. OWNER/STAFF are always scoped to
+        # no business_id match is required. OWNER is always scoped to
         # exactly one Business.
         if user.role != AdminRole.PLATFORM_OPERATOR and user.business_id != business_id:
             raise AdminForbiddenError(

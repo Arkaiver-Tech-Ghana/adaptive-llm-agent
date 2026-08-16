@@ -2,9 +2,9 @@
 owner account. Render's free plan has no persistent disk (Dockerfile), so
 data/admin.sqlite3 is wiped every deploy — this reseeds one owner per
 Business on every boot so login never breaks after a redeploy. Owner
-accounts created afterward through the admin API (staff, extra owners)
+accounts created afterward — via self-serve signup or the admin API —
 don't survive a redeploy; accepted as fine for a demo-scale showcase (see
-issue #17 / this PR's design notes).
+issue #17).
 
 Only supplies data — the insert mechanics stay encapsulated in
 SqliteAdminStore.upsert_user(), same convention as

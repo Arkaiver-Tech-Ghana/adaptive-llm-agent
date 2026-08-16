@@ -30,9 +30,9 @@ def _layer_with_users(tmp_path: Path) -> tuple[AdminInterfaceLayer, SqliteAdminS
     )
     store.upsert_user(
         AdminUser(
-            email="staff@hotel.test",
+            email="owner@hotel.test",
             password_hash=hash_password("pw"),
-            role=AdminRole.STAFF,
+            role=AdminRole.OWNER,
             business_id="hotel",
         )
     )
@@ -54,24 +54,16 @@ def test_owner_authorized_for_own_business(tmp_path):
     layer, store = _layer_with_users(tmp_path)
     token = _token_for(store, "owner@kc.test")
 
-    user = layer.authorize(token, "kampuscrave", {AdminRole.OWNER, AdminRole.STAFF})
+    user = layer.authorize(token, "kampuscrave", {AdminRole.OWNER})
     assert user.email == "owner@kc.test"
 
 
-def test_staff_forbidden_from_another_business(tmp_path):
+def test_owner_forbidden_from_another_business(tmp_path):
     layer, store = _layer_with_users(tmp_path)
-    token = _token_for(store, "staff@hotel.test")
+    token = _token_for(store, "owner@hotel.test")
 
     with pytest.raises(AdminForbiddenError):
-        layer.authorize(token, "kampuscrave", {AdminRole.OWNER, AdminRole.STAFF})
-
-
-def test_staff_forbidden_from_owner_only_action(tmp_path):
-    layer, store = _layer_with_users(tmp_path)
-    token = _token_for(store, "staff@hotel.test")
-
-    with pytest.raises(AdminForbiddenError):
-        layer.authorize(token, "hotel", {AdminRole.OWNER})
+        layer.authorize(token, "kampuscrave", {AdminRole.OWNER})
 
 
 def test_platform_operator_allowed_cross_business_when_role_permitted(tmp_path):
@@ -87,7 +79,7 @@ def test_platform_operator_forbidden_from_write_route_that_excludes_it(tmp_path)
     token = _token_for(store, "ops@arkaiver.test")
 
     with pytest.raises(AdminForbiddenError):
-        layer.authorize(token, "kampuscrave", {AdminRole.OWNER, AdminRole.STAFF})
+        layer.authorize(token, "kampuscrave", {AdminRole.OWNER})
 
 
 def test_authorize_rejects_bad_token(tmp_path):

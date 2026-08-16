@@ -14,33 +14,29 @@ from typing import Any
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
-from adaptive_agent.admin.auth import (
-    create_access_token,
-    hash_password,
-    verify_password,
-)
-from adaptive_agent.admin.base import AdminRole, AdminStore, AdminUser
+from adaptive_agent.admin.auth import create_access_token, verify_password
+from adaptive_agent.admin.base import AdminRole, AdminStore
 from adaptive_agent.admin.interface_layer import (
     AdminAuthError,
     AdminForbiddenError,
     AdminInterfaceLayer,
-    InvalidConfirmationTokenError,
 )
 from adaptive_agent.business_config.loader import (
     BusinessConfigError,
     load_business_config,
 )
+from adaptive_agent.business_config.provisioning import (
+    BusinessAlreadyExistsError,
+    InvalidBusinessIdError,
+    OwnerEmailAlreadyExistsError,
+    provision_business,
+)
 from adaptive_agent.business_config.writer import (
     ConfigPatchError,
     update_business_config,
 )
-from adaptive_agent.menu.base import MenuItem
-from adaptive_agent.menu.sqlite_repository import SqliteMenuRepository
-from adaptive_agent.rooms.base import Room
-from adaptive_agent.rooms.sqlite_repository import SqliteRoomRepository
 
 _OWNER_ONLY = {AdminRole.OWNER}
-_OWNER_AND_STAFF = {AdminRole.OWNER, AdminRole.STAFF}
 _OWNER_AND_PLATFORM_OPERATOR = {AdminRole.OWNER, AdminRole.PLATFORM_OPERATOR}
 
 
@@ -54,15 +50,11 @@ class LoginResponse(BaseModel):
     token_type: str = "bearer"
 
 
-class CreateStaffRequest(BaseModel):
-    email: str
-    password: str
-
-
-class StaffUserOut(BaseModel):
-    email: str
-    role: AdminRole
-    business_id: str | None = None
+class SignupRequest(BaseModel):
+    business_id: str
+    display_name: str
+    owner_email: str
+    owner_password: str
 
 
 def _bearer_token(authorization: str | None) -> str:
@@ -82,40 +74,8 @@ def build_admin_router(
     admin_interface_layer: AdminInterfaceLayer,
     admin_store: AdminStore,
     businesses_dir: Path,
-    session_db_dir: Path,
 ) -> APIRouter:
     router = APIRouter(prefix="/admin/api/v1")
-
-    # Lazily built, cached per business_id — one shared sqlite3 connection
-    # per repository (house style: no connection pool, no per-request
-    # connections), populated on first admin request rather than eagerly
-    # for every Business at import time.
-    _menu_repos: dict[str, SqliteMenuRepository] = {}
-    _room_repos: dict[str, SqliteRoomRepository] = {}
-
-    def _menu_repo(business_id: str) -> SqliteMenuRepository:
-        if business_id not in _menu_repos:
-            config = load_business_config(_config_path(businesses_dir, business_id))
-            db_path = session_db_dir / f"{business_id}.sqlite3"
-            kwargs: dict[str, Any] = {}
-            if config.storage.table:
-                kwargs["table"] = config.storage.table
-            if config.storage.columns:
-                kwargs["columns"] = config.storage.columns
-            _menu_repos[business_id] = SqliteMenuRepository(db_path, **kwargs)
-        return _menu_repos[business_id]
-
-    def _room_repo(business_id: str) -> SqliteRoomRepository:
-        if business_id not in _room_repos:
-            config = load_business_config(_config_path(businesses_dir, business_id))
-            db_path = session_db_dir / f"{business_id}.sqlite3"
-            kwargs: dict[str, Any] = {}
-            if config.storage.table:
-                kwargs["table"] = config.storage.table
-            if config.storage.columns:
-                kwargs["columns"] = config.storage.columns
-            _room_repos[business_id] = SqliteRoomRepository(db_path, **kwargs)
-        return _room_repos[business_id]
 
     def _authorize(authorization: str | None, business_id: str | None, allowed_roles: set[AdminRole]):
         token = _bearer_token(authorization)
@@ -132,6 +92,26 @@ def build_admin_router(
         if user is None or not verify_password(body.password, user.password_hash):
             raise HTTPException(status_code=401, detail="Invalid email or password")
         return LoginResponse(access_token=create_access_token(user))
+
+    @router.post("/auth/signup", response_model=LoginResponse, status_code=201)
+    def signup(body: SignupRequest) -> LoginResponse:
+        try:
+            owner = provision_business(
+                business_id=body.business_id,
+                display_name=body.display_name,
+                owner_email=body.owner_email,
+                owner_password=body.owner_password,
+                businesses_dir=businesses_dir,
+                admin_store=admin_store,
+            )
+        except InvalidBusinessIdError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except (BusinessAlreadyExistsError, OwnerEmailAlreadyExistsError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        admin_interface_layer.record_audit(
+            owner, body.business_id, "business.signup", after=owner.email
+        )
+        return LoginResponse(access_token=create_access_token(owner))
 
     @router.get("/businesses/{business_id}/config")
     def get_config(business_id: str, authorization: str | None = Header(default=None)) -> dict:
@@ -158,205 +138,6 @@ def build_admin_router(
             user, business_id, "config.update", before=str(before), after=str(after)
         )
         return after
-
-    # --- Staff accounts -------------------------------------------------
-
-    @router.get("/businesses/{business_id}/staff")
-    def list_staff(
-        business_id: str, authorization: str | None = Header(default=None)
-    ) -> list[StaffUserOut]:
-        _authorize(authorization, business_id, _OWNER_ONLY)
-        return [
-            StaffUserOut(email=u.email, role=u.role, business_id=u.business_id)
-            for u in admin_store.list_users_for_business(business_id)
-            if u.role == AdminRole.STAFF
-        ]
-
-    @router.post("/businesses/{business_id}/staff", status_code=201)
-    def create_staff(
-        business_id: str,
-        body: CreateStaffRequest,
-        authorization: str | None = Header(default=None),
-    ) -> StaffUserOut:
-        user = _authorize(authorization, business_id, _OWNER_ONLY)
-        if admin_store.get_user_by_email(body.email) is not None:
-            raise HTTPException(status_code=409, detail=f"Admin user already exists: {body.email!r}")
-        staff = AdminUser(
-            email=body.email,
-            password_hash=hash_password(body.password),
-            role=AdminRole.STAFF,
-            business_id=business_id,
-        )
-        admin_store.upsert_user(staff)
-        admin_interface_layer.record_audit(user, business_id, "staff.create", after=staff.email)
-        return StaffUserOut(email=staff.email, role=staff.role, business_id=staff.business_id)
-
-    @router.delete("/businesses/{business_id}/staff/{email}")
-    def delete_staff(
-        business_id: str,
-        email: str,
-        confirm_token: str | None = None,
-        authorization: str | None = Header(default=None),
-    ) -> dict:
-        user = _authorize(authorization, business_id, _OWNER_ONLY)
-        existing = admin_store.get_user_by_email(email)
-        if existing is None or existing.business_id != business_id or existing.role != AdminRole.STAFF:
-            raise HTTPException(status_code=404, detail=f"No such staff account: {email!r}")
-
-        description = f"Delete staff account {email!r} from {business_id}"
-        if confirm_token is None:
-            token = admin_interface_layer.request_confirmation(description)
-            return {"status": "confirmation_required", "confirm_token": token, "description": description}
-        try:
-            admin_interface_layer.resolve_confirmation(confirm_token)
-        except InvalidConfirmationTokenError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-        admin_store.delete_user(email)
-        admin_interface_layer.record_audit(user, business_id, "staff.delete", before=existing.email)
-        return {"status": "deleted"}
-
-    # --- Menu items -------------------------------------------------
-
-    @router.get("/businesses/{business_id}/menu-items")
-    def list_menu_items(
-        business_id: str, authorization: str | None = Header(default=None)
-    ) -> list[MenuItem]:
-        _authorize(authorization, business_id, _OWNER_AND_STAFF)
-        return _menu_repo(business_id).list_items()
-
-    @router.post("/businesses/{business_id}/menu-items", status_code=201)
-    def create_menu_item(
-        business_id: str, item: MenuItem, authorization: str | None = Header(default=None)
-    ) -> MenuItem:
-        user = _authorize(authorization, business_id, _OWNER_AND_STAFF)
-        repo = _menu_repo(business_id)
-        if repo.get_item(item.name) is not None:
-            raise HTTPException(status_code=409, detail=f"Menu item already exists: {item.name!r}")
-        repo.seed([item])
-        admin_interface_layer.record_audit(
-            user, business_id, "menu_item.create", after=item.model_dump_json()
-        )
-        return item
-
-    @router.patch("/businesses/{business_id}/menu-items/{name}")
-    def update_menu_item(
-        business_id: str,
-        name: str,
-        patch: dict[str, Any],
-        authorization: str | None = Header(default=None),
-    ) -> MenuItem:
-        user = _authorize(authorization, business_id, _OWNER_AND_STAFF)
-        repo = _menu_repo(business_id)
-        existing = repo.get_item(name)
-        if existing is None:
-            raise HTTPException(status_code=404, detail=f"No such menu item: {name!r}")
-        updated = existing.model_copy(update=patch)
-        repo.seed([updated])
-        admin_interface_layer.record_audit(
-            user,
-            business_id,
-            "menu_item.update",
-            before=existing.model_dump_json(),
-            after=updated.model_dump_json(),
-        )
-        return updated
-
-    @router.delete("/businesses/{business_id}/menu-items/{name}")
-    def delete_menu_item(
-        business_id: str,
-        name: str,
-        confirm_token: str | None = None,
-        authorization: str | None = Header(default=None),
-    ) -> dict:
-        user = _authorize(authorization, business_id, _OWNER_AND_STAFF)
-        repo = _menu_repo(business_id)
-        existing = repo.get_item(name)
-        if existing is None:
-            raise HTTPException(status_code=404, detail=f"No such menu item: {name!r}")
-
-        description = f"Delete menu item {name!r} from {business_id}"
-        if confirm_token is None:
-            token = admin_interface_layer.request_confirmation(description)
-            return {"status": "confirmation_required", "confirm_token": token, "description": description}
-        try:
-            admin_interface_layer.resolve_confirmation(confirm_token)
-        except InvalidConfirmationTokenError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-        repo.delete_item(name)
-        admin_interface_layer.record_audit(
-            user, business_id, "menu_item.delete", before=existing.model_dump_json()
-        )
-        return {"status": "deleted"}
-
-    # --- Rooms --------------------------------------------------------
-
-    @router.get("/businesses/{business_id}/rooms")
-    def list_rooms(business_id: str, authorization: str | None = Header(default=None)) -> list[Room]:
-        _authorize(authorization, business_id, _OWNER_AND_STAFF)
-        return _room_repo(business_id).list_rooms()
-
-    @router.post("/businesses/{business_id}/rooms", status_code=201)
-    def create_room(
-        business_id: str, room: Room, authorization: str | None = Header(default=None)
-    ) -> Room:
-        user = _authorize(authorization, business_id, _OWNER_AND_STAFF)
-        repo = _room_repo(business_id)
-        if repo.get_room(room.name) is not None:
-            raise HTTPException(status_code=409, detail=f"Room already exists: {room.name!r}")
-        repo.seed([room])
-        admin_interface_layer.record_audit(
-            user, business_id, "room.create", after=room.model_dump_json()
-        )
-        return room
-
-    @router.patch("/businesses/{business_id}/rooms/{name}")
-    def update_room(
-        business_id: str,
-        name: str,
-        patch: dict[str, Any],
-        authorization: str | None = Header(default=None),
-    ) -> Room:
-        user = _authorize(authorization, business_id, _OWNER_AND_STAFF)
-        repo = _room_repo(business_id)
-        existing = repo.get_room(name)
-        if existing is None:
-            raise HTTPException(status_code=404, detail=f"No such room: {name!r}")
-        updated = existing.model_copy(update=patch)
-        repo.seed([updated])
-        admin_interface_layer.record_audit(
-            user, business_id, "room.update", before=existing.model_dump_json(), after=updated.model_dump_json()
-        )
-        return updated
-
-    @router.delete("/businesses/{business_id}/rooms/{name}")
-    def delete_room(
-        business_id: str,
-        name: str,
-        confirm_token: str | None = None,
-        authorization: str | None = Header(default=None),
-    ) -> dict:
-        user = _authorize(authorization, business_id, _OWNER_AND_STAFF)
-        repo = _room_repo(business_id)
-        existing = repo.get_room(name)
-        if existing is None:
-            raise HTTPException(status_code=404, detail=f"No such room: {name!r}")
-
-        description = f"Delete room {name!r} from {business_id}"
-        if confirm_token is None:
-            token = admin_interface_layer.request_confirmation(description)
-            return {"status": "confirmation_required", "confirm_token": token, "description": description}
-        try:
-            admin_interface_layer.resolve_confirmation(confirm_token)
-        except InvalidConfirmationTokenError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-        repo.delete_room(name)
-        admin_interface_layer.record_audit(
-            user, business_id, "room.delete", before=existing.model_dump_json()
-        )
-        return {"status": "deleted"}
 
     # --- Audit log ------------------------------------------------------
 

@@ -1,7 +1,8 @@
 """One-time (safe-to-rerun) seed script for KampusCrave's live menu table.
 
 Only supplies data — the insert mechanics stay encapsulated in
-SqliteMenuRepository.seed(), so this script never writes raw SQL. Mirrors
+EntityBackedMenuRepository.seed()/SqliteEntityRepository, so this script
+never writes raw SQL. Mirrors
 businesses/kampuscrave/context/menu.md's current items; the context doc
 stays the source for general browsing/categories, this table becomes the
 authoritative source for a specific item's price/stock.
@@ -10,8 +11,10 @@ authoritative source for a specific item's price/stock.
 import os
 from pathlib import Path
 
+from adaptive_agent.entities.menu_repository_adapter import EntityBackedMenuRepository
+from adaptive_agent.entities.sqlite_repository import SqliteEntityRepository
 from adaptive_agent.menu.base import MenuItem
-from adaptive_agent.menu.sqlite_repository import SqliteMenuRepository
+from adaptive_agent.tools.registry import resolve_or_create_menu_table
 
 MENU_ITEMS = [
     MenuItem(name="Classic Beef Burger", category="burgers", price=6.50, stock_quantity=25),
@@ -32,7 +35,9 @@ MENU_ITEMS = [
 def main() -> None:
     session_db_dir = Path(os.environ.get("SESSION_DB_DIR", "data"))
     db_path = session_db_dir / "kampuscrave.sqlite3"
-    repository = SqliteMenuRepository(db_path)
+    entity_repository = SqliteEntityRepository(db_path)
+    table_name = resolve_or_create_menu_table(entity_repository)
+    repository = EntityBackedMenuRepository(entity_repository, table_name)
     repository.seed(MENU_ITEMS)
     print(f"Seeded {len(MENU_ITEMS)} menu items into {db_path}")
 

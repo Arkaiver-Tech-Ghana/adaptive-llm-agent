@@ -76,18 +76,6 @@ class SqliteAdminStore:
             )
             self._conn.commit()
 
-    def list_users_for_business(self, business_id: str) -> list[AdminUser]:
-        with self._lock:
-            rows = self._conn.execute(
-                "SELECT email, password_hash, role, business_id FROM admin_users "
-                "WHERE business_id = ?",
-                (business_id,),
-            ).fetchall()
-        return [
-            AdminUser(email=row[0], password_hash=row[1], role=AdminRole(row[2]), business_id=row[3])
-            for row in rows
-        ]
-
     def delete_user(self, email: str) -> None:
         with self._lock:
             self._conn.execute("DELETE FROM admin_users WHERE email = ?", (email,))
