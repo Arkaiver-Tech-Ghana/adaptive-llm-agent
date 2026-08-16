@@ -49,10 +49,18 @@ def client(tmp_path: Path) -> TestClient:
     )
     admin_store.upsert_user(
         AdminUser(
-            email="staff@hotel.test",
+            email="owner@hotel.test",
             password_hash=hash_password("pw"),
-            role=AdminRole.STAFF,
+            role=AdminRole.OWNER,
             business_id="hotel",
+        )
+    )
+    admin_store.upsert_user(
+        AdminUser(
+            email="operator@platform.test",
+            password_hash=hash_password("pw"),
+            role=AdminRole.PLATFORM_OPERATOR,
+            business_id=None,
         )
     )
 
@@ -100,16 +108,16 @@ def test_get_config_without_token_is_401(client):
     assert response.status_code == 401
 
 
-def test_staff_cannot_read_another_businesss_config(client):
-    token = _login(client, "staff@hotel.test")
+def test_owner_cannot_read_another_businesss_config(client):
+    token = _login(client, "owner@hotel.test")
     response = client.get(
         "/admin/api/v1/businesses/kampuscrave/config", headers=_auth_headers(token)
     )
     assert response.status_code == 403
 
 
-def test_staff_cannot_write_config_owner_only(client):
-    token = _login(client, "staff@hotel.test")
+def test_platform_operator_cannot_write_config_owner_only(client):
+    token = _login(client, "operator@platform.test")
     response = client.patch(
         "/admin/api/v1/businesses/hotel/config",
         json={"business_logic": {"persona": "New."}},
@@ -211,85 +219,8 @@ def test_menu_item_delete_rejects_bad_confirm_token(client):
     assert response.status_code == 400
 
 
-def test_staff_create_list_delete_round_trip(client):
-    token = _login(client, "owner@kc.test")
-    headers = _auth_headers(token)
-
-    create = client.post(
-        "/admin/api/v1/businesses/kampuscrave/staff",
-        json={"email": "newstaff@kc.test", "password": "temp-pw"},
-        headers=headers,
-    )
-    assert create.status_code == 201
-    assert create.json() == {"email": "newstaff@kc.test", "role": "staff", "business_id": "kampuscrave"}
-
-    duplicate = client.post(
-        "/admin/api/v1/businesses/kampuscrave/staff",
-        json={"email": "newstaff@kc.test", "password": "temp-pw"},
-        headers=headers,
-    )
-    assert duplicate.status_code == 409
-
-    listing = client.get("/admin/api/v1/businesses/kampuscrave/staff", headers=headers)
-    assert [u["email"] for u in listing.json()] == ["newstaff@kc.test"]
-
-    first_delete = client.delete(
-        "/admin/api/v1/businesses/kampuscrave/staff/newstaff@kc.test", headers=headers
-    )
-    assert first_delete.json()["status"] == "confirmation_required"
-    confirm_token = first_delete.json()["confirm_token"]
-
-    second_delete = client.delete(
-        "/admin/api/v1/businesses/kampuscrave/staff/newstaff@kc.test",
-        params={"confirm_token": confirm_token},
-        headers=headers,
-    )
-    assert second_delete.json()["status"] == "deleted"
-
-    listing_after = client.get("/admin/api/v1/businesses/kampuscrave/staff", headers=headers)
-    assert listing_after.json() == []
-
-
-def test_staff_cannot_manage_staff(client):
-    token = _login(client, "staff@hotel.test")
-    headers = _auth_headers(token)
-    response = client.post(
-        "/admin/api/v1/businesses/hotel/staff",
-        json={"email": "x@hotel.test", "password": "pw"},
-        headers=headers,
-    )
-    assert response.status_code == 403
-
-
-def test_owner_cannot_manage_staff_of_another_business(client):
-    token = _login(client, "owner@kc.test")
-    headers = _auth_headers(token)
-    response = client.post(
-        "/admin/api/v1/businesses/hotel/staff",
-        json={"email": "x@hotel.test", "password": "pw"},
-        headers=headers,
-    )
-    assert response.status_code == 403
-
-
-def test_staff_delete_rejects_bad_confirm_token(client):
-    token = _login(client, "owner@kc.test")
-    headers = _auth_headers(token)
-    client.post(
-        "/admin/api/v1/businesses/kampuscrave/staff",
-        json={"email": "newstaff@kc.test", "password": "temp-pw"},
-        headers=headers,
-    )
-    response = client.delete(
-        "/admin/api/v1/businesses/kampuscrave/staff/newstaff@kc.test",
-        params={"confirm_token": "made-up"},
-        headers=headers,
-    )
-    assert response.status_code == 400
-
-
 def test_room_create_and_delete(client):
-    token = _login(client, "staff@hotel.test")
+    token = _login(client, "owner@hotel.test")
     headers = _auth_headers(token)
 
     create = client.post(

@@ -14,7 +14,6 @@ from pydantic import BaseModel
 
 class AdminRole(str, Enum):
     OWNER = "owner"
-    STAFF = "staff"
     PLATFORM_OPERATOR = "platform_operator"
 
 
@@ -22,8 +21,9 @@ class AdminUser(BaseModel):
     email: str
     password_hash: str
     role: AdminRole
-    # None only for PLATFORM_OPERATOR — every OWNER/STAFF user is scoped to
-    # exactly one Business (issue #17's role table).
+    # None only for PLATFORM_OPERATOR — every OWNER is scoped to exactly one
+    # Business (issue #17's role table). One owner login per Business, no
+    # staff/multi-user accounts — see ADR 0008.
     business_id: str | None = None
 
 
@@ -42,7 +42,6 @@ class AdminAuditLogEntry(BaseModel):
 class AdminStore(Protocol):
     def get_user_by_email(self, email: str) -> AdminUser | None: ...
     def upsert_user(self, user: AdminUser) -> None: ...
-    def list_users_for_business(self, business_id: str) -> list[AdminUser]: ...
     def delete_user(self, email: str) -> None: ...
     def append_audit_log(self, entry: AdminAuditLogEntry) -> None: ...
     # business_id=None returns every Business's entries — only meant to be
