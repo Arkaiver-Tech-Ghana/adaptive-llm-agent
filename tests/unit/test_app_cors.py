@@ -4,9 +4,19 @@ call is blocked by the browser before it reaches AdminInterfaceLayer.
 Covers create_app()'s CORSMiddleware wiring, not the admin router's own
 logic (already covered by test_admin_router.py)."""
 
+import os
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+
+# create_app() builds a module-level `app` at import time (WhatsApp's
+# uvicorn entrypoint), which reads these from the environment — set
+# fallbacks before the import so collection doesn't fail in CI, where no
+# .env file supplies them the way it does locally.
+os.environ.setdefault("WHATSAPP_VERIFY_TOKEN", "verify-me")
+os.environ.setdefault("WHATSAPP_APP_SECRET", "shh")
+os.environ.setdefault("WHATSAPP_ACCESS_TOKEN", "token")
+os.environ.setdefault("ADMIN_JWT_SECRET", "test-secret")
 
 from adaptive_agent.interfaces.whatsapp.app import create_app
 
