@@ -14,7 +14,11 @@ from typing import Any
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
-from adaptive_agent.admin.auth import create_access_token, hash_password, verify_password
+from adaptive_agent.admin.auth import (
+    create_access_token,
+    hash_password,
+    verify_password,
+)
 from adaptive_agent.admin.base import AdminRole, AdminStore, AdminUser
 from adaptive_agent.admin.interface_layer import (
     AdminAuthError,
