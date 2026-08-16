@@ -24,3 +24,12 @@ Admin Interface Layer, which resolves `business_id` + role from
 `data/admin.sqlite3` before ever touching a per-Business file — the
 exception is about where identity is stored, not about weakening
 per-Business isolation.
+
+## Update (RBAC simplification)
+
+The `staff` role described above was removed: the product is one owner
+login per Business, not multi-user staff accounts (see ADR 0008). This
+doesn't affect the decision above — `admin_users`/`admin_audit_log` still
+need to live outside the per-Business keying scheme for the same reason,
+since `platform_operator` is still inherently cross-Business. Only the role
+set narrows to `owner` + `platform_operator`.

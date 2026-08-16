@@ -25,7 +25,7 @@ def test_upsert_then_get_user_round_trips(tmp_path):
 def test_upsert_is_safe_to_rerun_and_overwrites_changed_fields(tmp_path):
     store = _store(tmp_path)
     store.upsert_user(
-        AdminUser(email="a@b.test", password_hash="old", role=AdminRole.STAFF, business_id="kampuscrave")
+        AdminUser(email="a@b.test", password_hash="old", role=AdminRole.PLATFORM_OPERATOR)
     )
     store.upsert_user(
         AdminUser(email="a@b.test", password_hash="new", role=AdminRole.OWNER, business_id="hotel")
@@ -44,22 +44,10 @@ def test_platform_operator_has_no_business_id(tmp_path):
     assert store.get_user_by_email("ops@arkaiver.test").business_id is None
 
 
-def test_list_users_for_business_only_returns_that_businesss_users(tmp_path):
-    store = _store(tmp_path)
-    store.upsert_user(
-        AdminUser(email="a@kc.test", password_hash="h", role=AdminRole.OWNER, business_id="kampuscrave")
-    )
-    store.upsert_user(
-        AdminUser(email="b@hotel.test", password_hash="h", role=AdminRole.OWNER, business_id="hotel")
-    )
-
-    assert {u.email for u in store.list_users_for_business("kampuscrave")} == {"a@kc.test"}
-
-
 def test_delete_user_removes_it(tmp_path):
     store = _store(tmp_path)
     store.upsert_user(
-        AdminUser(email="a@kc.test", password_hash="h", role=AdminRole.STAFF, business_id="kampuscrave")
+        AdminUser(email="a@kc.test", password_hash="h", role=AdminRole.OWNER, business_id="kampuscrave")
     )
     store.delete_user("a@kc.test")
     assert store.get_user_by_email("a@kc.test") is None

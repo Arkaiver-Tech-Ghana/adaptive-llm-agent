@@ -14,12 +14,8 @@ from typing import Any
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
-from adaptive_agent.admin.auth import (
-    create_access_token,
-    hash_password,
-    verify_password,
-)
-from adaptive_agent.admin.base import AdminRole, AdminStore, AdminUser
+from adaptive_agent.admin.auth import create_access_token, verify_password
+from adaptive_agent.admin.base import AdminRole, AdminStore
 from adaptive_agent.admin.interface_layer import (
     AdminAuthError,
     AdminForbiddenError,
@@ -40,7 +36,6 @@ from adaptive_agent.rooms.base import Room
 from adaptive_agent.rooms.sqlite_repository import SqliteRoomRepository
 
 _OWNER_ONLY = {AdminRole.OWNER}
-_OWNER_AND_STAFF = {AdminRole.OWNER, AdminRole.STAFF}
 _OWNER_AND_PLATFORM_OPERATOR = {AdminRole.OWNER, AdminRole.PLATFORM_OPERATOR}
 
 
@@ -52,17 +47,6 @@ class LoginRequest(BaseModel):
 class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
-
-
-class CreateStaffRequest(BaseModel):
-    email: str
-    password: str
-
-
-class StaffUserOut(BaseModel):
-    email: str
-    role: AdminRole
-    business_id: str | None = None
 
 
 def _bearer_token(authorization: str | None) -> str:
@@ -159,77 +143,20 @@ def build_admin_router(
         )
         return after
 
-    # --- Staff accounts -------------------------------------------------
-
-    @router.get("/businesses/{business_id}/staff")
-    def list_staff(
-        business_id: str, authorization: str | None = Header(default=None)
-    ) -> list[StaffUserOut]:
-        _authorize(authorization, business_id, _OWNER_ONLY)
-        return [
-            StaffUserOut(email=u.email, role=u.role, business_id=u.business_id)
-            for u in admin_store.list_users_for_business(business_id)
-            if u.role == AdminRole.STAFF
-        ]
-
-    @router.post("/businesses/{business_id}/staff", status_code=201)
-    def create_staff(
-        business_id: str,
-        body: CreateStaffRequest,
-        authorization: str | None = Header(default=None),
-    ) -> StaffUserOut:
-        user = _authorize(authorization, business_id, _OWNER_ONLY)
-        if admin_store.get_user_by_email(body.email) is not None:
-            raise HTTPException(status_code=409, detail=f"Admin user already exists: {body.email!r}")
-        staff = AdminUser(
-            email=body.email,
-            password_hash=hash_password(body.password),
-            role=AdminRole.STAFF,
-            business_id=business_id,
-        )
-        admin_store.upsert_user(staff)
-        admin_interface_layer.record_audit(user, business_id, "staff.create", after=staff.email)
-        return StaffUserOut(email=staff.email, role=staff.role, business_id=staff.business_id)
-
-    @router.delete("/businesses/{business_id}/staff/{email}")
-    def delete_staff(
-        business_id: str,
-        email: str,
-        confirm_token: str | None = None,
-        authorization: str | None = Header(default=None),
-    ) -> dict:
-        user = _authorize(authorization, business_id, _OWNER_ONLY)
-        existing = admin_store.get_user_by_email(email)
-        if existing is None or existing.business_id != business_id or existing.role != AdminRole.STAFF:
-            raise HTTPException(status_code=404, detail=f"No such staff account: {email!r}")
-
-        description = f"Delete staff account {email!r} from {business_id}"
-        if confirm_token is None:
-            token = admin_interface_layer.request_confirmation(description)
-            return {"status": "confirmation_required", "confirm_token": token, "description": description}
-        try:
-            admin_interface_layer.resolve_confirmation(confirm_token)
-        except InvalidConfirmationTokenError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-        admin_store.delete_user(email)
-        admin_interface_layer.record_audit(user, business_id, "staff.delete", before=existing.email)
-        return {"status": "deleted"}
-
     # --- Menu items -------------------------------------------------
 
     @router.get("/businesses/{business_id}/menu-items")
     def list_menu_items(
         business_id: str, authorization: str | None = Header(default=None)
     ) -> list[MenuItem]:
-        _authorize(authorization, business_id, _OWNER_AND_STAFF)
+        _authorize(authorization, business_id, _OWNER_ONLY)
         return _menu_repo(business_id).list_items()
 
     @router.post("/businesses/{business_id}/menu-items", status_code=201)
     def create_menu_item(
         business_id: str, item: MenuItem, authorization: str | None = Header(default=None)
     ) -> MenuItem:
-        user = _authorize(authorization, business_id, _OWNER_AND_STAFF)
+        user = _authorize(authorization, business_id, _OWNER_ONLY)
         repo = _menu_repo(business_id)
         if repo.get_item(item.name) is not None:
             raise HTTPException(status_code=409, detail=f"Menu item already exists: {item.name!r}")
@@ -246,7 +173,7 @@ def build_admin_router(
         patch: dict[str, Any],
         authorization: str | None = Header(default=None),
     ) -> MenuItem:
-        user = _authorize(authorization, business_id, _OWNER_AND_STAFF)
+        user = _authorize(authorization, business_id, _OWNER_ONLY)
         repo = _menu_repo(business_id)
         existing = repo.get_item(name)
         if existing is None:
@@ -269,7 +196,7 @@ def build_admin_router(
         confirm_token: str | None = None,
         authorization: str | None = Header(default=None),
     ) -> dict:
-        user = _authorize(authorization, business_id, _OWNER_AND_STAFF)
+        user = _authorize(authorization, business_id, _OWNER_ONLY)
         repo = _menu_repo(business_id)
         existing = repo.get_item(name)
         if existing is None:
@@ -294,14 +221,14 @@ def build_admin_router(
 
     @router.get("/businesses/{business_id}/rooms")
     def list_rooms(business_id: str, authorization: str | None = Header(default=None)) -> list[Room]:
-        _authorize(authorization, business_id, _OWNER_AND_STAFF)
+        _authorize(authorization, business_id, _OWNER_ONLY)
         return _room_repo(business_id).list_rooms()
 
     @router.post("/businesses/{business_id}/rooms", status_code=201)
     def create_room(
         business_id: str, room: Room, authorization: str | None = Header(default=None)
     ) -> Room:
-        user = _authorize(authorization, business_id, _OWNER_AND_STAFF)
+        user = _authorize(authorization, business_id, _OWNER_ONLY)
         repo = _room_repo(business_id)
         if repo.get_room(room.name) is not None:
             raise HTTPException(status_code=409, detail=f"Room already exists: {room.name!r}")
@@ -318,7 +245,7 @@ def build_admin_router(
         patch: dict[str, Any],
         authorization: str | None = Header(default=None),
     ) -> Room:
-        user = _authorize(authorization, business_id, _OWNER_AND_STAFF)
+        user = _authorize(authorization, business_id, _OWNER_ONLY)
         repo = _room_repo(business_id)
         existing = repo.get_room(name)
         if existing is None:
@@ -337,7 +264,7 @@ def build_admin_router(
         confirm_token: str | None = None,
         authorization: str | None = Header(default=None),
     ) -> dict:
-        user = _authorize(authorization, business_id, _OWNER_AND_STAFF)
+        user = _authorize(authorization, business_id, _OWNER_ONLY)
         repo = _room_repo(business_id)
         existing = repo.get_room(name)
         if existing is None:
