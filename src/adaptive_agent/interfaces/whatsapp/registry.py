@@ -15,7 +15,10 @@ import logging
 from collections.abc import Callable
 from pathlib import Path
 
-from adaptive_agent.business_config.loader import BusinessConfigError, load_business_config
+from adaptive_agent.business_config.loader import (
+    BusinessConfigError,
+    load_business_config,
+)
 from adaptive_agent.conversation import ConversationRuntime, load_conversation_runtime
 
 logger = logging.getLogger(__name__)

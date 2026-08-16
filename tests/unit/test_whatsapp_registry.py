@@ -1,7 +1,10 @@
 from pathlib import Path
 from types import SimpleNamespace
 
-from adaptive_agent.business_config.loader import BusinessConfigError, load_business_config
+from adaptive_agent.business_config.loader import (
+    BusinessConfigError,
+    load_business_config,
+)
 from adaptive_agent.interfaces.whatsapp.registry import build_business_registry
 
 FIXTURES = Path(__file__).parent / "fixtures" / "whatsapp_registry"
