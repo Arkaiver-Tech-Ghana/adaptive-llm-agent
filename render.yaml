@@ -25,3 +25,8 @@ services:
         sync: false
       - key: ADMIN_OWNER_PASSWORD_HOTEL
         sync: false
+      # Comma-separated allowed origins for the admin frontend (CORS) —
+      # the adaptive-llm-agent-admin Vercel deploy URL. Defaults to just
+      # the local Vite dev origin if unset.
+      - key: ADMIN_CORS_ORIGINS
+        sync: false

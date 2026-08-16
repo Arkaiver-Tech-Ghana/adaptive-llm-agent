@@ -17,6 +17,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from adaptive_agent.admin.interface_layer import AdminInterfaceLayer
 from adaptive_agent.admin.sqlite_store import SqliteAdminStore
@@ -71,6 +72,26 @@ def create_app() -> FastAPI:
     )
 
     fastapi_app = FastAPI(title="Adaptive Agent — WhatsApp Webhook")
+
+    # The admin frontend (adaptive-llm-agent-admin) is a separate, cross-
+    # origin Vercel deploy calling /admin/api/v1/* straight from the
+    # browser — without CORS every such call is blocked before it reaches
+    # these routes. The WhatsApp webhook below is server-to-server (Meta ->
+    # this API), never browser-invoked, so applying this app-wide doesn't
+    # affect it: no Origin header, no CORS check. allow_credentials stays
+    # False since auth is a bearer token in a header, not a cookie.
+    admin_origins = [
+        origin.strip()
+        for origin in os.environ.get("ADMIN_CORS_ORIGINS", "http://localhost:5173").split(",")
+        if origin.strip()
+    ]
+    fastapi_app.add_middleware(
+        CORSMiddleware,
+        allow_origins=admin_origins,
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "PATCH", "DELETE"],
+        allow_headers=["Authorization", "Content-Type"],
+    )
 
     @fastapi_app.get("/health")
     def health() -> dict[str, str]:
