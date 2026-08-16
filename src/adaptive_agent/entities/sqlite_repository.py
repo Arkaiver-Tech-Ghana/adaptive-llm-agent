@@ -56,6 +56,14 @@ class UnknownTableError(Exception):
     pass
 
 
+class UnknownColumnError(Exception):
+    pass
+
+
+class ColumnAlreadyExistsError(Exception):
+    pass
+
+
 class InvalidToolLinkedTableError(Exception):
     """Raised when a TableDef claims a ``tool_linked`` type but doesn't
     carry the columns/types that type requires, or another table is
@@ -158,6 +166,63 @@ class SqliteEntityRepository:
             )
             self._conn.commit()
 
+    def add_column(self, table_name: str, column: ColumnDef) -> TableDef:
+        table_def = self._require_table(table_name)
+        column_name = validate_identifier(column.name, InvalidTableConfigError)
+        if column_name == "id" or any(c.name == column_name for c in table_def.columns):
+            raise ColumnAlreadyExistsError(f"Column already exists: {column_name!r}")
+        column = ColumnDef(name=column_name, type=column.type, required=column.required)
+
+        with self._lock:
+            # No NOT NULL here even if `required` is set: SQLite only allows
+            # ALTER TABLE ADD COLUMN with a NOT NULL constraint when it also
+            # carries a non-NULL DEFAULT, which nothing here collects — every
+            # existing row would need a starting value. `required` still
+            # round-trips through metadata for the caller's own validation.
+            self._conn.execute(
+                f"ALTER TABLE {table_def.table_name} ADD COLUMN {column.name} "
+                f"{_SQL_TYPE_BY_COLUMN_TYPE[column.type]}"
+            )
+            updated_columns = [*table_def.columns, column]
+            self._write_columns_metadata(table_name, updated_columns)
+            self._conn.commit()
+        return self._require_table(table_name)
+
+    def rename_column(self, table_name: str, column_name: str, new_name: str) -> TableDef:
+        table_def = self._require_table(table_name)
+        new_name = validate_identifier(new_name, InvalidTableConfigError)
+        existing = next((c for c in table_def.columns if c.name == column_name), None)
+        if existing is None:
+            raise UnknownColumnError(f"No such column: {column_name!r}")
+        if new_name != column_name and any(c.name == new_name for c in table_def.columns):
+            raise ColumnAlreadyExistsError(f"Column already exists: {new_name!r}")
+        self._require_column_not_tool_linked(table_def, column_name, action="rename")
+
+        with self._lock:
+            self._conn.execute(
+                f"ALTER TABLE {table_def.table_name} RENAME COLUMN {column_name} TO {new_name}"
+            )
+            updated_columns = [
+                ColumnDef(name=new_name, type=c.type, required=c.required) if c.name == column_name else c
+                for c in table_def.columns
+            ]
+            self._write_columns_metadata(table_name, updated_columns)
+            self._conn.commit()
+        return self._require_table(table_name)
+
+    def drop_column(self, table_name: str, column_name: str) -> TableDef:
+        table_def = self._require_table(table_name)
+        if not any(c.name == column_name for c in table_def.columns):
+            raise UnknownColumnError(f"No such column: {column_name!r}")
+        self._require_column_not_tool_linked(table_def, column_name, action="remove")
+
+        with self._lock:
+            self._conn.execute(f"ALTER TABLE {table_def.table_name} DROP COLUMN {column_name}")
+            updated_columns = [c for c in table_def.columns if c.name != column_name]
+            self._write_columns_metadata(table_name, updated_columns)
+            self._conn.commit()
+        return self._require_table(table_name)
+
     def list_rows(self, table_name: str) -> list[dict]:
         table_def = self._require_table(table_name)
         column_names = ["id", *(c.name for c in table_def.columns)]
@@ -233,6 +298,25 @@ class SqliteEntityRepository:
         if row is None:
             raise UnknownTableError(f"No such table: {table_name!r}")
         return self._table_def_from_row(row)
+
+    def _write_columns_metadata(self, table_name: str, columns: list[ColumnDef]) -> None:
+        """Caller holds ``self._lock`` already — this only ever runs as
+        part of a larger transaction alongside the ``ALTER TABLE`` it
+        describes, never standalone."""
+        self._conn.execute(
+            "UPDATE __qantonic_tables__ SET columns_json = ? WHERE table_name = ?",
+            (json.dumps([c.model_dump(mode="json") for c in columns]), table_name),
+        )
+
+    @staticmethod
+    def _require_column_not_tool_linked(table_def: TableDef, column_name: str, action: str) -> None:
+        if table_def.tool_linked is None:
+            return
+        required = _TOOL_LINKED_REQUIRED_COLUMNS.get(table_def.tool_linked, {})
+        if column_name in required:
+            raise InvalidToolLinkedTableError(
+                f"Can't {action} {column_name!r}: required by tool_linked={table_def.tool_linked!r}"
+            )
 
     @staticmethod
     def _check_tool_linked_requirements(tool_linked: str, columns: list[ColumnDef]) -> None:
