@@ -88,6 +88,11 @@ class SqliteAdminStore:
             for row in rows
         ]
 
+    def delete_user(self, email: str) -> None:
+        with self._lock:
+            self._conn.execute("DELETE FROM admin_users WHERE email = ?", (email,))
+            self._conn.commit()
+
     def append_audit_log(self, entry: AdminAuditLogEntry) -> None:
         with self._lock:
             self._conn.execute(

@@ -14,8 +14,8 @@ from typing import Any
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
-from adaptive_agent.admin.auth import create_access_token, verify_password
-from adaptive_agent.admin.base import AdminRole, AdminStore
+from adaptive_agent.admin.auth import create_access_token, hash_password, verify_password
+from adaptive_agent.admin.base import AdminRole, AdminStore, AdminUser
 from adaptive_agent.admin.interface_layer import (
     AdminAuthError,
     AdminForbiddenError,
@@ -48,6 +48,17 @@ class LoginRequest(BaseModel):
 class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class CreateStaffRequest(BaseModel):
+    email: str
+    password: str
+
+
+class StaffUserOut(BaseModel):
+    email: str
+    role: AdminRole
+    business_id: str | None = None
 
 
 def _bearer_token(authorization: str | None) -> str:
@@ -143,6 +154,63 @@ def build_admin_router(
             user, business_id, "config.update", before=str(before), after=str(after)
         )
         return after
+
+    # --- Staff accounts -------------------------------------------------
+
+    @router.get("/businesses/{business_id}/staff")
+    def list_staff(
+        business_id: str, authorization: str | None = Header(default=None)
+    ) -> list[StaffUserOut]:
+        _authorize(authorization, business_id, _OWNER_ONLY)
+        return [
+            StaffUserOut(email=u.email, role=u.role, business_id=u.business_id)
+            for u in admin_store.list_users_for_business(business_id)
+            if u.role == AdminRole.STAFF
+        ]
+
+    @router.post("/businesses/{business_id}/staff", status_code=201)
+    def create_staff(
+        business_id: str,
+        body: CreateStaffRequest,
+        authorization: str | None = Header(default=None),
+    ) -> StaffUserOut:
+        user = _authorize(authorization, business_id, _OWNER_ONLY)
+        if admin_store.get_user_by_email(body.email) is not None:
+            raise HTTPException(status_code=409, detail=f"Admin user already exists: {body.email!r}")
+        staff = AdminUser(
+            email=body.email,
+            password_hash=hash_password(body.password),
+            role=AdminRole.STAFF,
+            business_id=business_id,
+        )
+        admin_store.upsert_user(staff)
+        admin_interface_layer.record_audit(user, business_id, "staff.create", after=staff.email)
+        return StaffUserOut(email=staff.email, role=staff.role, business_id=staff.business_id)
+
+    @router.delete("/businesses/{business_id}/staff/{email}")
+    def delete_staff(
+        business_id: str,
+        email: str,
+        confirm_token: str | None = None,
+        authorization: str | None = Header(default=None),
+    ) -> dict:
+        user = _authorize(authorization, business_id, _OWNER_ONLY)
+        existing = admin_store.get_user_by_email(email)
+        if existing is None or existing.business_id != business_id or existing.role != AdminRole.STAFF:
+            raise HTTPException(status_code=404, detail=f"No such staff account: {email!r}")
+
+        description = f"Delete staff account {email!r} from {business_id}"
+        if confirm_token is None:
+            token = admin_interface_layer.request_confirmation(description)
+            return {"status": "confirmation_required", "confirm_token": token, "description": description}
+        try:
+            admin_interface_layer.resolve_confirmation(confirm_token)
+        except InvalidConfirmationTokenError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        admin_store.delete_user(email)
+        admin_interface_layer.record_audit(user, business_id, "staff.delete", before=existing.email)
+        return {"status": "deleted"}
 
     # --- Menu items -------------------------------------------------
 
