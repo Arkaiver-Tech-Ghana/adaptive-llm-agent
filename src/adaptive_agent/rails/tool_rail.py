@@ -21,6 +21,8 @@ class ToolRailDecision(str, Enum):
 def decide(tool_call: ToolCall, tool_configs: list[ToolConfig]) -> ToolRailDecision:
     for tool_config in tool_configs:
         if tool_config.name == tool_call.name:
+            if not tool_config.enabled:
+                return ToolRailDecision.DENY
             if tool_config.requires_confirmation:
                 return ToolRailDecision.REQUIRE_CONFIRMATION
             return ToolRailDecision.ALLOW

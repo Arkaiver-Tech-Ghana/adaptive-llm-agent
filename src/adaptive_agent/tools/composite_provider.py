@@ -1,8 +1,9 @@
 """Lets a Business's Tool dispatch span more than one ToolProvider. Every
 Business already gets a domain-specific provider chosen by ``tool_provider``
-(tools/registry.py) *and* an MCP provider for whichever of its Tools declare
-``mcp_endpoint`` (tools/mcp_provider.py) — neither one needs to know the
-other exists.
+(tools/registry.py), the generic entity-CRUD provider for whatever Custom
+Tables it owns (tools/entity_crud_provider.py), *and* an MCP provider for
+whichever of its Tools declare ``mcp_endpoint`` (tools/mcp_provider.py) —
+none of them needs to know about the others.
 """
 
 from typing import Any

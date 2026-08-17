@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException
+from pydantic import BaseModel
 
 from adaptive_agent.admin.base import AdminRole, AdminStore
 from adaptive_agent.admin.interface_layer import (
@@ -23,15 +24,24 @@ from adaptive_agent.admin.interface_layer import (
     AdminInterfaceLayer,
     InvalidConfirmationTokenError,
 )
-from adaptive_agent.entities.base import TableDef
+from adaptive_agent.business_config.loader import load_business_config
+from adaptive_agent.business_config.writer import update_business_config
+from adaptive_agent.entities.base import ColumnDef, TableDef
+from adaptive_agent.entities.crud_tools import crud_tool_names, derive_crud_tool_configs
 from adaptive_agent.entities.sqlite_repository import (
+    ColumnAlreadyExistsError,
     InvalidTableConfigError,
     InvalidToolLinkedTableError,
     SqliteEntityRepository,
     TableAlreadyExistsError,
+    UnknownColumnError,
     UnknownTableError,
 )
 from adaptive_agent.interfaces.admin.router import _bearer_token, _config_path
+
+
+class RenameColumnRequest(BaseModel):
+    name: str
 
 _OWNER_ONLY = {AdminRole.OWNER}
 
@@ -86,12 +96,39 @@ def build_entities_router(
         business_id: str, table_def: TableDef, authorization: str | None = Header(default=None)
     ) -> TableDef:
         user = _authorize(authorization, business_id, _OWNER_ONLY)
+        config_path = _config_path(businesses_dir, business_id)
+
+        # A tool_linked table (e.g. sqlite_menu) already has a hand-authored
+        # Tool wired into tools/registry.py — only a plain owner table gets
+        # the generic list/create/update/delete Tools auto-generated for it
+        # (entities/crud_tools.py, ADR 0008's "generic CRUD tool" follow-up).
+        current = load_business_config(config_path)
+        new_tool_configs = (
+            derive_crud_tool_configs(table_def) if table_def.tool_linked is None else []
+        )
+        colliding = {t.name for t in current.tools} & {t.name for t in new_tool_configs}
+        if colliding:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Table name {table_def.table_name!r} would generate Tool name(s) "
+                    f"that already exist: {sorted(colliding)}"
+                ),
+            )
+
         try:
             _entity_repo(business_id).create_table(table_def)
         except TableAlreadyExistsError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except (InvalidTableConfigError, InvalidToolLinkedTableError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        if new_tool_configs:
+            updated_tools = [t.model_dump(mode="json") for t in current.tools] + [
+                t.model_dump(mode="json") for t in new_tool_configs
+            ]
+            update_business_config(config_path, {"tools": updated_tools})
+
         admin_interface_layer.record_audit(
             user, business_id, "table.create", after=table_def.model_dump_json()
         )
@@ -118,8 +155,98 @@ def build_entities_router(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         repo.drop_table(table_name)
+
+        config_path = _config_path(businesses_dir, business_id)
+        current = load_business_config(config_path)
+        removed_names = set(crud_tool_names(table_name))
+        remaining_tools = [t for t in current.tools if t.name not in removed_names]
+        if len(remaining_tools) != len(current.tools):
+            update_business_config(
+                config_path, {"tools": [t.model_dump(mode="json") for t in remaining_tools]}
+            )
+
         admin_interface_layer.record_audit(
             user, business_id, "table.delete", before=existing.model_dump_json()
+        )
+        return {"status": "deleted"}
+
+    # --- Columns --------------------------------------------------------
+    # Add/rename are immediate (non-destructive); drop reuses the same
+    # Confirmation Request pattern as delete_table/delete_row below since
+    # it discards every row's value for that column.
+
+    @router.post("/businesses/{business_id}/tables/{table_name}/columns", status_code=201)
+    def add_column(
+        business_id: str,
+        table_name: str,
+        column: ColumnDef,
+        authorization: str | None = Header(default=None),
+    ) -> TableDef:
+        user = _authorize(authorization, business_id, _OWNER_ONLY)
+        repo = _entity_repo(business_id)
+        before = _require_table(repo, table_name)
+        try:
+            updated = repo.add_column(table_name, column)
+        except ColumnAlreadyExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except InvalidTableConfigError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        admin_interface_layer.record_audit(
+            user, business_id, "table.column.add", before=before.model_dump_json(), after=updated.model_dump_json()
+        )
+        return updated
+
+    @router.patch("/businesses/{business_id}/tables/{table_name}/columns/{column_name}")
+    def rename_column(
+        business_id: str,
+        table_name: str,
+        column_name: str,
+        body: RenameColumnRequest,
+        authorization: str | None = Header(default=None),
+    ) -> TableDef:
+        user = _authorize(authorization, business_id, _OWNER_ONLY)
+        repo = _entity_repo(business_id)
+        before = _require_table(repo, table_name)
+        try:
+            updated = repo.rename_column(table_name, column_name, body.name)
+        except UnknownColumnError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ColumnAlreadyExistsError, InvalidTableConfigError, InvalidToolLinkedTableError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        admin_interface_layer.record_audit(
+            user, business_id, "table.column.rename", before=before.model_dump_json(), after=updated.model_dump_json()
+        )
+        return updated
+
+    @router.delete("/businesses/{business_id}/tables/{table_name}/columns/{column_name}")
+    def delete_column(
+        business_id: str,
+        table_name: str,
+        column_name: str,
+        confirm_token: str | None = None,
+        authorization: str | None = Header(default=None),
+    ) -> dict:
+        user = _authorize(authorization, business_id, _OWNER_ONLY)
+        repo = _entity_repo(business_id)
+        before = _require_table(repo, table_name)
+        if not any(c.name == column_name for c in before.columns):
+            raise HTTPException(status_code=404, detail=f"No such column: {column_name!r}")
+
+        description = f"Delete column {column_name!r} from {business_id}/{table_name}"
+        if confirm_token is None:
+            token = admin_interface_layer.request_confirmation(description)
+            return {"status": "confirmation_required", "confirm_token": token, "description": description}
+        try:
+            admin_interface_layer.resolve_confirmation(confirm_token)
+        except InvalidConfirmationTokenError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        try:
+            updated = repo.drop_column(table_name, column_name)
+        except InvalidToolLinkedTableError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        admin_interface_layer.record_audit(
+            user, business_id, "table.column.delete", before=before.model_dump_json(), after=updated.model_dump_json()
         )
         return {"status": "deleted"}
 
