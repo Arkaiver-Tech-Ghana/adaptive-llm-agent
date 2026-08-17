@@ -31,6 +31,7 @@ from adaptive_agent.session.sqlite_store import SqliteSessionStore
 from adaptive_agent.tools.base import ToolProvider
 from adaptive_agent.tools.composite_provider import CompositeToolProvider
 from adaptive_agent.tools.entity_crud_provider import EntityCrudToolProvider
+from adaptive_agent.tools.mcp_provider import MCPToolProvider
 from adaptive_agent.tools.registry import build_tool_provider
 
 _YES_REPLIES = {"yes", "y", "yeah", "yep", "confirm", "ok", "okay"}
@@ -238,13 +239,14 @@ def _build_confirmation_prompt(tool_call: ToolCall, tool_configs: list[ToolConfi
 
 def load_conversation_runtime(business_config_path: Path) -> ConversationRuntime:
     """Loads a Business Config and wires a ready ConversationRuntime: an
-    Agent Core (via load_agent_core), a per-Business ToolProvider (via
-    the tools registry) composed with the generic entity-CRUD provider
-    every Business gets for its own Custom Tables (CompositeToolProvider —
-    see tools/entity_crud_provider.py), a SqliteSessionStore and
-    SqliteCustomerStore sharing one file per Business under SESSION_DB_DIR
-    (``data/`` by default), and a NemoRailChecker pointed at the repo-root
-    nemo_rails/ config dir."""
+    Agent Core (via load_agent_core), and a per-Business ToolProvider (via
+    the tools registry) composed with the generic entity-CRUD provider every
+    Business gets for its own Custom Tables (tools/entity_crud_provider.py)
+    and an MCP provider for whichever of the Business's Tools declare
+    ``mcp_endpoint`` (tools/mcp_provider.py) — see CompositeToolProvider.
+    Also a SqliteSessionStore and SqliteCustomerStore sharing one file per
+    Business under SESSION_DB_DIR (``data/`` by default), and a
+    NemoRailChecker pointed at the repo-root nemo_rails/ config dir."""
     agent_core = load_agent_core(business_config_path)
     nemo_config_dir = Path(__file__).resolve().parents[2] / "nemo_rails"
     rail_checker = NemoRailChecker(nemo_config_dir)
@@ -253,8 +255,18 @@ def load_conversation_runtime(business_config_path: Path) -> ConversationRuntime
     base_provider = build_tool_provider(
         agent_core.business_config.tool_provider, agent_core.business_config.storage, db_path
     )
+    mcp_endpoints = {
+        t.name: t.mcp_endpoint for t in agent_core.business_config.tools if t.mcp_endpoint
+    }
+    # Local providers first, MCP last: dispatch falls through on
+    # UnknownToolError, so there is no reason to pay for a network round
+    # trip on a name one of the in-process providers already handles.
     tool_provider = CompositeToolProvider(
-        [base_provider, EntityCrudToolProvider(SqliteEntityRepository(db_path))]
+        [
+            base_provider,
+            EntityCrudToolProvider(SqliteEntityRepository(db_path)),
+            MCPToolProvider(mcp_endpoints),
+        ]
     )
     return ConversationRuntime(
         agent_core=agent_core,
