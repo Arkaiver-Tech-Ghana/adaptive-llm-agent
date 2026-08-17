@@ -28,6 +28,13 @@ def _app_env(monkeypatch, tmp_path: Path, **extra: str) -> None:
     monkeypatch.setenv("ADMIN_JWT_SECRET", "test-secret")
     monkeypatch.setenv("BUSINESSES_DIR", str(tmp_path / "businesses"))
     monkeypatch.setenv("SESSION_DB_DIR", str(tmp_path / "data"))
+    # app.py runs load_dotenv() at import time, so a developer's local .env
+    # leaks ADMIN_CORS_ORIGINS into os.environ and hides create_app()'s
+    # built-in default — the default test below then asserts against
+    # whatever that machine happens to deploy to. Clear it here and let the
+    # tests that want an origin pass one through **extra, so every case
+    # states its own CORS config instead of inheriting one.
+    monkeypatch.delenv("ADMIN_CORS_ORIGINS", raising=False)
     for key, value in extra.items():
         monkeypatch.setenv(key, value)
 
