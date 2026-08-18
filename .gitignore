@@ -9,3 +9,7 @@ __pycache__/
 htmlcov/
 data/*.sqlite3
 data/*.sqlite3-*
+.agents/
+.claude/
+skills-lock.json
+video-not-yet.md
